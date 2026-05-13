@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"C:\\Program Files (x86)\\Python311\\python.exe\" \"C:\\Coding\\S12\\monitor_dashboard.py\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

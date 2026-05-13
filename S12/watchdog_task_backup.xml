@@ -1,0 +1,87 @@
+﻿<?xml version="1.0" encoding="UTF-16"?>
+
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+
+  <RegistrationInfo>
+
+    <Description>S1/S12 실시간 모니터 자동 재시작 감시 (15분 간격)</Description>
+
+    <URI>\Monitor_Watchdog_15min</URI>
+
+  </RegistrationInfo>
+
+  <Principals>
+
+    <Principal id="Author">
+
+      <UserId>S-1-5-21-1544723930-3741505557-3147487822-1001</UserId>
+
+      <LogonType>InteractiveToken</LogonType>
+
+    </Principal>
+
+  </Principals>
+
+  <Settings>
+
+    <DisallowStartIfOnBatteries>true</DisallowStartIfOnBatteries>
+
+    <StopIfGoingOnBatteries>true</StopIfGoingOnBatteries>
+
+    <ExecutionTimeLimit>PT2M</ExecutionTimeLimit>
+
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+
+    <StartWhenAvailable>true</StartWhenAvailable>
+
+    <IdleSettings>
+
+      <Duration>PT10M</Duration>
+
+      <WaitTimeout>PT1H</WaitTimeout>
+
+      <StopOnIdleEnd>true</StopOnIdleEnd>
+
+      <RestartOnIdle>false</RestartOnIdle>
+
+    </IdleSettings>
+
+  </Settings>
+
+  <Triggers>
+
+    <CalendarTrigger>
+
+      <StartBoundary>2026-03-25T07:00:00</StartBoundary>
+
+      <Repetition>
+
+        <Interval>PT15M</Interval>
+
+        <Duration>PT13H</Duration>
+
+      </Repetition>
+
+      <ScheduleByDay>
+
+        <DaysInterval>1</DaysInterval>
+
+      </ScheduleByDay>
+
+    </CalendarTrigger>
+
+  </Triggers>
+
+  <Actions Context="Author">
+
+    <Exec>
+
+      <Command>powershell.exe</Command>
+
+      <Arguments>-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "C:\Users\log\Desktop\Code\S12\watchdog_monitors.ps1"</Arguments>
+
+    </Exec>
+
+  </Actions>
+
+</Task>
