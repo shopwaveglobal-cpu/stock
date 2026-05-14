@@ -1133,7 +1133,7 @@ def sleep_with_lock_check(seconds: float):
         if not is_lock_holder():
             logger.info("⚠ 락 파일이 다른 프로세스에 의해 갱신됨 — 이 프로세스를 종료합니다.")
             sys.exit(0)
-        _time.sleep(min(60, end - _time.time()))
+        _time.sleep(max(0, min(60, end - _time.time())))
 
 
 def main():
