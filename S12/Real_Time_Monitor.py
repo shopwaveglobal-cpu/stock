@@ -1113,6 +1113,29 @@ def acquire_lock() -> bool:
     return True
 
 
+def is_lock_holder() -> bool:
+    """현재 프로세스가 락 파일의 보유자인지 확인. 다른 프로세스가 재시작하면 False."""
+    import os
+    try:
+        if not os.path.exists(LOCK_FILE):
+            return False
+        with open(LOCK_FILE, "r") as f:
+            return int(f.read().strip()) == os.getpid()
+    except Exception:
+        return False
+
+
+def sleep_with_lock_check(seconds: float):
+    """지정 시간 동안 대기하되 60초마다 락 보유 여부 확인. 락 잃으면 즉시 종료."""
+    import time as _time
+    end = _time.time() + seconds
+    while _time.time() < end:
+        if not is_lock_holder():
+            logger.info("⚠ 락 파일이 다른 프로세스에 의해 갱신됨 — 이 프로세스를 종료합니다.")
+            sys.exit(0)
+        _time.sleep(min(60, end - _time.time()))
+
+
 def main():
     """
     메인 함수 - 단순화된 실시간 모니터링 (Excel 기반)
@@ -1155,7 +1178,12 @@ def main():
     while True:
         cycle_count += 1
         current_time = datetime.now()
-        
+
+        # 루프 상단: 락 보유 여부 확인 (재시작으로 락을 잃었으면 즉시 종료)
+        if not is_lock_holder():
+            logger.info("⚠ 락 파일이 다른 프로세스에 의해 갱신됨 — 이 프로세스를 종료합니다.")
+            sys.exit(0)
+
         # 모니터링 시간대 체크 (강제 실행 옵션이 없는 경우에만)
         if not args.force:
             if not is_monitoring_time():
@@ -1164,7 +1192,7 @@ def main():
                 if not trading_info['is_trading_day']:
                     logger.info(f"\n[사이클 {cycle_count}] 비거래일입니다 ({trading_info['reason']})")
                     logger.info("⏰ 1시간 후 재확인... (비거래일 대기 중)")
-                    time.sleep(3600)  # 1시간 대기
+                    sleep_with_lock_check(3600)
                     continue
                 else:
                     logger.info(f"\n[사이클 {cycle_count}] 모니터링 시간대가 아닙니다 (거래일 08:00-20:00)")
@@ -1176,12 +1204,12 @@ def main():
                         next_morning = next_day.replace(hour=8, minute=0, second=0, microsecond=0)
                         wait_seconds = (next_morning - current_time).total_seconds()
                         logger.info(f"⏰ {wait_seconds/3600:.1f}시간 대기...")
-                        time.sleep(wait_seconds if wait_seconds > 0 else 3600)
+                        sleep_with_lock_check(wait_seconds if wait_seconds > 0 else 3600)
                         continue
                     # 08:00 이전이면 대기
                     logger.info(f"⏰ {base_interval}초 후 재확인...")
                     logger.info("강제 실행하려면 --force 옵션을 사용하세요.")
-                    time.sleep(base_interval)
+                    sleep_with_lock_check(base_interval)
                     continue
         else:
             # 강제 실행 모드에서는 시간대만 체크
@@ -1194,11 +1222,11 @@ def main():
                     next_morning = next_day.replace(hour=8, minute=0, second=0, microsecond=0)
                     wait_seconds = (next_morning - current_time).total_seconds()
                     logger.info(f"⏰ {wait_seconds/3600:.1f}시간 대기...")
-                    time.sleep(wait_seconds if wait_seconds > 0 else 3600)
+                    sleep_with_lock_check(wait_seconds if wait_seconds > 0 else 3600)
                     continue
                 logger.info(f"\n[사이클 {cycle_count}] 모니터링 시간대가 아닙니다 (08:00-20:00)")
                 logger.info(f"⏰ {base_interval}초 후 재확인...")
-                time.sleep(base_interval)
+                sleep_with_lock_check(base_interval)
                 continue
         
         logger.info(f"\n{'=' * 80}")
@@ -1216,7 +1244,7 @@ def main():
         logger.info(f"   종료하려면 Ctrl+C를 누르세요.")
         
         try:
-            time.sleep(base_interval)
+            sleep_with_lock_check(base_interval)
         except KeyboardInterrupt:
             logger.info("\n" + "=" * 80)
             logger.info("[STOP] 사용자가 모니터링을 중지했습니다.")

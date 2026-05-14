@@ -6,13 +6,17 @@ $loop = Get-WmiObject Win32_Process | Where-Object {
 }
 
 if ($h -eq 7 -or -not $loop) {
-    # kill 기존 프로세스
-    Get-WmiObject Win32_Process | Where-Object {
+    # kill 기존 프로세스 (taskkill /F 사용 - WMI Terminate보다 확실)
+    $targets = Get-WmiObject Win32_Process | Where-Object {
         ($_.Name -eq "python.exe" -and $_.CommandLine -like "*Real_Time_Monitor.py*" -and $_.CommandLine -notlike "*Real_Time_Monitor_S1*") -or
         ($_.Name -eq "cmd.exe" -and $_.CommandLine -like "*S12_self_restart*")
-    } | ForEach-Object {
-        (Get-WmiObject Win32_Process -Filter "ProcessId='$($_.ProcessId)'").Terminate() | Out-Null
     }
+    foreach ($p in $targets) {
+        taskkill /F /PID $p.ProcessId /T 2>$null
+    }
+    # 락 파일도 확실히 제거
+    $lockFile = "C:\Users\log\Desktop\Code\S12\realtime_monitor.lock"
+    if (Test-Path $lockFile) { Remove-Item $lockFile -Force }
     Start-Sleep -Seconds 3
     # 새로 시작
     Start-Process -FilePath "wscript" -ArgumentList "//nologo C:\Users\log\Desktop\Code\S12\S12_start_monitor.vbs" -WindowStyle Hidden
