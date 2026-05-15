@@ -693,15 +693,31 @@ class CryptoRealtimeMonitor:
         try:
             while True:
                 schedule.run_pending()
+                sys.stdout.flush()
                 time.sleep(60)  # 1분마다 스케줄 확인
         except KeyboardInterrupt:
             print("\n" + "=" * 60)
             print("[STOP] 모니터링 중단됨")
             print("=" * 60)
         except Exception as e:
-            print(f"\n[ERROR] 모니터링 오류: {e}")
             import traceback
-            traceback.print_exc()
+            error_msg = traceback.format_exc()
+            print(f"\n[ERROR] 모니터링 오류: {e}")
+            print(error_msg)
+            self._log_crash(str(e), error_msg)
+
+    def _log_crash(self, error: str, traceback_str: str):
+        """크래시 로그를 파일에 기록"""
+        log_dir = self.omg_dir / "logs"
+        log_dir.mkdir(exist_ok=True)
+        log_file = log_dir / "omg_monitor_error.log"
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*60}\n")
+            f.write(f"[CRASH] {ts}\n")
+            f.write(f"Error: {error}\n")
+            f.write(traceback_str)
+            f.write(f"{'='*60}\n")
 
 def main():
     monitor = CryptoRealtimeMonitor()

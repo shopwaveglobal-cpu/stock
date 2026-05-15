@@ -156,12 +156,17 @@ def send_slack_realtime_alert_block_kit(
         
         # 매수선 인접 알람인 경우 (매수 체결이 아닌 경우)
         if "매수 체결" not in alert_type:
+            # 매수선 인접 알람에는 목표가 삽입: "1차 매수선 5% 인접" → "1차 매수선(15,000) 5% 인접"
+            if "매수선" in alert_type and target_price:
+                header_text = alert_type.replace("매수선 ", f"매수선({int(round(target_price)):,}) ")
+            else:
+                header_text = alert_type
             # Header (시스템 라벨 제거, 이모지 + 알람 타입만)
             blocks.append({
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": f"{emoji} {alert_type}",
+                    "text": f"{emoji} {header_text}",
                     "emoji": True
                 }
             })

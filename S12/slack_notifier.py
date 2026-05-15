@@ -156,12 +156,17 @@ def send_slack_realtime_alert_block_kit(
         
         # 매수선 인접 알람인 경우 (매수 체결이 아닌 경우)
         if "매수 체결" not in alert_type:
+            # 매수선 인접 알람에는 목표가 삽입: "1차 매수선 5% 인접" → "1차 매수선(15,000) 5% 인접"
+            if "매수선" in alert_type and target_price:
+                header_text = alert_type.replace("매수선 ", f"매수선({int(round(target_price)):,}) ")
+            else:
+                header_text = alert_type
             # Header (시스템 라벨 제거, 이모지 + 알람 타입만)
             blocks.append({
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": f"{emoji} {alert_type}",
+                    "text": f"{emoji} {header_text}",
                     "emoji": True
                 }
             })
@@ -681,33 +686,37 @@ def send_slack_daily_report(alerts: List[dict], total_stocks: int, system_label:
             "type": "divider"
         })
         
-        # Slack blocks 50개 제한 초과 시 종목 목록을 텍스트로 압축
-        MAX_BLOCKS = 50
-        if len(blocks) > MAX_BLOCKS:
-            # 헤더/시간/divider 3개만 유지하고 나머지를 단일 텍스트로 대체
-            summary_lines = []
-            if ready_buy1:
-                summary_lines.append(f"🟡 1차 매수 접근 ({len(ready_buy1)}개): " + ", ".join(s.get("종목명","") for s in ready_buy1))
-            if ready_buy2:
-                summary_lines.append(f"🟠 2차 매수 접근 ({len(ready_buy2)}개): " + ", ".join(s.get("종목명","") for s in ready_buy2))
-            if ready_buy3:
-                summary_lines.append(f"🟤 3차 매수 접근 ({len(ready_buy3)}개): " + ", ".join(s.get("종목명","") for s in ready_buy3))
-            if bought_stocks:
-                summary_lines.append(f"🔴 매수 완료 ({len(bought_stocks)}개): " + ", ".join(s.get("종목명","") for s in bought_stocks))
-            if ready_sell:
-                summary_lines.append(f"🟢 매도선 접근 ({len(ready_sell)}개): " + ", ".join(s.get("종목명","") for s in ready_sell))
-            blocks = blocks[:3] + [{
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "\n".join(summary_lines)
-                }
-            }, {"type": "divider"}]
-
         # Fallback 텍스트
         fallback_text = f"📊 [S12] 일일 트레이딩 리포트 - {now}"
 
-        return send_slack_message(fallback_text, parse_html=False, blocks=blocks)
+        # Slack blocks 50개 제한 초과 시 분할 전송
+        MAX_BLOCKS = 50
+        if len(blocks) <= MAX_BLOCKS:
+            return send_slack_message(fallback_text, parse_html=False, blocks=blocks)
+
+        # 50개 단위로 분할 (섹션 경계에서 자연스럽게 나뉨)
+        cont_header = [
+            {
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text": "📊 *[S12] 일일 트레이딩 리포트 (계속)*"}]
+            },
+            {"type": "divider"}
+        ]
+
+        chunks = []
+        chunks.append(blocks[:MAX_BLOCKS])
+        remaining = blocks[MAX_BLOCKS:]
+        while remaining:
+            available = MAX_BLOCKS - len(cont_header)
+            chunks.append(cont_header + remaining[:available])
+            remaining = remaining[available:]
+
+        success = True
+        for j, chunk in enumerate(chunks):
+            ft = fallback_text if j == 0 else f"{fallback_text} (계속 {j+1})"
+            if not send_slack_message(ft, parse_html=False, blocks=chunk):
+                success = False
+        return success
         
     except Exception as e:
         logger.error(f"Slack 일일 리포트 포맷팅 실패: {e}")

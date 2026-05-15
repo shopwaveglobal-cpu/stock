@@ -20,16 +20,59 @@ $omgPython = Get-WmiObject Win32_Process | Where-Object {
 }
 
 if (-not $omgPython) {
-    Write-Log "OMG 크립토 미실행 감지 -> 재시작"
-    $lockFile = "C:\Users\log\Desktop\Code\omg\crypto_monitor.lock"
-    if (Test-Path $lockFile) {
-        Remove-Item $lockFile -Force
-        Write-Log "OMG 락 파일 삭제"
+    Write-Log "OMG 크립토 미실행 감지"
+
+    # 재시작 카운터 파일
+    $restartLog = "C:\Users\log\Desktop\Code\omg\omg_restart_count.json"
+    # .env 파일에서 SLACK_WEBHOOK_URL 로드
+    $envFile = "C:\Users\log\Desktop\Code\S12\.env"
+    $webhookUrl = ""
+    if (Test-Path $envFile) {
+        Get-Content $envFile | ForEach-Object {
+            if ($_ -match "^SLACK_WEBHOOK_URL=(.+)$") { $webhookUrl = $Matches[1].Trim() }
+        }
     }
-    Start-Process -FilePath "C:\Python314\python.exe" `
-                  -ArgumentList "crypto_realtime_monitor.py" `
-                  -WorkingDirectory "C:\Users\log\Desktop\Code\omg" `
-                  -WindowStyle Normal
+    $now = Get-Date
+
+    # 카운터 로드
+    $restartData = @{ timestamps = @() }
+    if (Test-Path $restartLog) {
+        try { $restartData = Get-Content $restartLog -Raw | ConvertFrom-Json } catch {}
+    }
+
+    # 1시간 이내 재시작 횟수 계산
+    $cutoff = $now.AddHours(-1)
+    $recentRestarts = @($restartData.timestamps | Where-Object { [datetime]$_ -gt $cutoff })
+
+    if ($recentRestarts.Count -ge 3) {
+        # 크래시 루프 감지 → 재시작 중단 + 슬랙 알림
+        Write-Log "OMG 크래시 루프 감지 ($($recentRestarts.Count)회/1h) -> 재시작 중단"
+        $msg = ":rotating_light: *OMG 크립토 모니터 크래시 루프*`n1시간 내 $($recentRestarts.Count)회 재시작 감지. 수동 확인 필요.`nlogs/omg_monitor_error.log 확인하세요."
+        $body = @{ text = $msg } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $body -ContentType "application/json" } catch {}
+    } else {
+        # 정상 재시작
+        $recentRestarts += $now.ToString("o")
+        $restartData = @{ timestamps = $recentRestarts }
+        $restartData | ConvertTo-Json | Set-Content $restartLog -Encoding UTF8
+
+        $lockFile = "C:\Users\log\Desktop\Code\omg\crypto_monitor.lock"
+        if (Test-Path $lockFile) {
+            Remove-Item $lockFile -Force
+            Write-Log "OMG 락 파일 삭제"
+        }
+
+        $ts = (Get-Date).ToString("yyyyMMdd")
+        $stdoutLog = "C:\Users\log\Desktop\Code\omg\logs\monitor_${ts}_out.log"
+        $stderrLog = "C:\Users\log\Desktop\Code\omg\logs\monitor_${ts}_err.log"
+        Write-Log "OMG 재시작 ($($recentRestarts.Count)회/1h)"
+        Start-Process -FilePath "C:\Python314\python.exe" `
+                      -ArgumentList "crypto_realtime_monitor.py" `
+                      -WorkingDirectory "C:\Users\log\Desktop\Code\omg" `
+                      -WindowStyle Hidden `
+                      -RedirectStandardOutput $stdoutLog `
+                      -RedirectStandardError $stderrLog
+    }
 }
 
 # 평일(월~금) + 07:00~20:00 사이에만 동작
