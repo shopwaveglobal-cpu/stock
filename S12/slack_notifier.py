@@ -153,7 +153,8 @@ def send_slack_realtime_alert_block_kit(
         
         # Block Kit blocks 생성
         blocks = []
-        
+        header_text = alert_type  # 기본값 (매수 체결 알람 등)
+
         # 매수선 인접 알람인 경우 (매수 체결이 아닌 경우)
         if "매수 체결" not in alert_type:
             # 매수선 인접 알람에는 목표가 삽입: "1차 매수선 5% 인접" → "1차 매수선(15,000) 5% 인접"
@@ -249,8 +250,8 @@ def send_slack_realtime_alert_block_kit(
                 "type": "divider"
             })
         
-        # Fallback 텍스트
-        fallback_text = f"{emoji} {alert_type} - {stock_name}"
+        # Fallback 텍스트 (미리보기에 목표가 포함)
+        fallback_text = f"{emoji} {header_text} - {stock_name}"
         
         return send_slack_message(fallback_text, parse_html=False, blocks=blocks)
         
