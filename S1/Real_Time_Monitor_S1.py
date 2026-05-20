@@ -621,7 +621,11 @@ def check_simplified_alert(
 
                 logger.info(f"🎯🎯 {stock_name} ({ticker}): 1차 매수 체결! 알람 전송")
                 return True
-        
+
+        # 당일 이미 1차 매수 체결된 경우 근접 알람 전부 스킵
+        elif ticker_alerts.get("BUY1_EXECUTED", False):
+            return False
+
         # 저가가 매수선 1% 이내 접근한 경우
         elif 0 < low_dist_buy1 <= 1.0:
             alert_key = "READY_BUY1_1%"
@@ -784,7 +788,11 @@ def check_simplified_alert(
 
                 logger.info(f"🎯🎯 {stock_name} ({ticker}): 2차 매수 체결! 알람 전송")
                 return True
-        
+
+        # 당일 이미 2차 매수 체결된 경우 근접 알람 전부 스킵
+        elif ticker_alerts.get("BUY2_EXECUTED", False):
+            return False
+
         # 저가가 매수선 1% 이내 접근한 경우
         elif 0 < low_dist_buy2 <= 1.0:
             alert_key = "READY_BUY2_1%"
@@ -950,7 +958,11 @@ def check_simplified_alert(
 
                 logger.info(f"🎯🎯🎯 {stock_name} ({ticker}): 3차 매수 체결! 알람 전송")
                 return True
-        
+
+        # 당일 이미 3차 매수 체결된 경우 근접 알람 전부 스킵
+        elif ticker_alerts.get("BUY3_EXECUTED", False):
+            return False
+
         # 저가가 매수선 1% 이내 접근한 경우
         elif 0 < low_dist_buy3 <= 1.0:
             alert_key = "READY_BUY3_1%"

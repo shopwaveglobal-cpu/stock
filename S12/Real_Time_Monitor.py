@@ -662,6 +662,9 @@ def check_simplified_alert(
                 return True
         else:
             # 매수선 인접 알람 (1%, 3%, 5%)
+            # 당일 이미 1차 매수 체결된 경우 근접 알람 전부 스킵
+            if ticker_alerts.get("BUY1_EXECUTED", False):
+                return False
             # 우선순위: 1% > 3% > 5% (이미 전송된 알람은 스킵)
             if 0 < low_dist_buy1 <= 1:
                 alert_key = "BUY1_1PCT"
@@ -769,6 +772,9 @@ def check_simplified_alert(
                 return True
         else:
             # 2차 매수선 인접 알람
+            # 당일 이미 2차 매수 체결된 경우 근접 알람 전부 스킵
+            if ticker_alerts.get("BUY2_EXECUTED", False):
+                return False
             if 0 < low_dist_buy2 <= 1:
                 alert_key = "BUY2_1PCT"
                 alert_type = "2차 매수선 1% 인접"
@@ -868,6 +874,9 @@ def check_simplified_alert(
                 return True
         else:
             # 3차 매수선 인접 알람
+            # 당일 이미 3차 매수 체결된 경우 근접 알람 전부 스킵
+            if ticker_alerts.get("BUY3_EXECUTED", False):
+                return False
             if 0 < low_dist_buy3 <= 1:
                 alert_key = "BUY3_1PCT"
                 alert_type = "3차 매수선 1% 인접"
