@@ -1,11 +1,62 @@
 {
-  "date": "2026-05-07",
+  "date": "2026-06-02",
   "alerts": {
-    "298380": {
+    "267260": {
+      "READY_BUY1_3%": true
+    },
+    "006800": {
+      "READY_BUY1_3%": true
+    },
+    "047050": {
       "READY_BUY1_5%": true
     },
-    "012750": {
+    "006260": {
       "READY_BUY1_5%": true
+    },
+    "062040": {
+      "BUY1_EXECUTED": true
+    },
+    "950160": {
+      "READY_BUY1_3%": true
+    },
+    "103140": {
+      "READY_BUY1_5%": true
+    },
+    "240810": {
+      "READY_BUY1_1%": true
+    },
+    "403870": {
+      "READY_BUY1_5%": true
+    },
+    "004800": {
+      "READY_BUY1_3%": true
+    },
+    "067310": {
+      "READY_BUY1_5%": true
+    },
+    "483650": {
+      "BUY1_EXECUTED": true
+    },
+    "267270": {
+      "READY_BUY1_3%": true
+    },
+    "375500": {
+      "READY_BUY1_3%": true
+    },
+    "047040": {
+      "BUY1_EXECUTED": true
+    },
+    "060370": {
+      "READY_BUY1_3%": true
+    },
+    "098460": {
+      "READY_BUY1_5%": true
+    },
+    "100090": {
+      "READY_BUY1_1%": true
+    },
+    "328130": {
+      "READY_BUY1_1%": true
     }
   }
 }

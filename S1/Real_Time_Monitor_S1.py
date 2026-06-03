@@ -56,14 +56,18 @@ DISTANCE_THRESHOLD = 5.0  # 5% 이내 접근 시 알람
 KIWOOM_BASE_URL = "https://api.kiwoom.com"
 KIWOOM_TOKEN_URL = "https://api.kiwoom.com/oauth2/token"
 KIWOOM_TOKEN = None
+KIWOOM_TOKEN_DATE = None      # 토큰 발급 날짜 (날짜 변경 시 자동 갱신)
+KIWOOM_TOKEN_EXPIRY = None    # 토큰 만료 시각 (datetime) — expires_dt 기반 정밀 갱신
 APPKEY = None
 SECRETKEY = None
 
 
 def get_access_token(appkey: str, secretkey: str) -> Optional[str]:
     """
-    키움 API 접근 토큰 발급
+    키움 API 접근 토큰 발급.
+    성공 시 전역 KIWOOM_TOKEN_EXPIRY 도 업데이트.
     """
+    global KIWOOM_TOKEN_EXPIRY
     try:
         headers = {"Content-Type": "application/json;charset=UTF-8"}
         body = {
@@ -71,20 +75,27 @@ def get_access_token(appkey: str, secretkey: str) -> Optional[str]:
             "appkey": appkey,
             "secretkey": secretkey
         }
-        
+
         response = requests.post(KIWOOM_TOKEN_URL, headers=headers, json=body, timeout=20)
         response.raise_for_status()
-        
+
         result = response.json()
         token = result.get("token") or result.get("access_token")
-        
+
         if token:
-            logger.info("✓ 접근 토큰 발급 성공")
+            # expires_dt 파싱 (형식: "20260529201000" = yyyyMMddHHmmss)
+            expires_dt_str = result.get("expires_dt", "")
+            try:
+                KIWOOM_TOKEN_EXPIRY = datetime.strptime(expires_dt_str, "%Y%m%d%H%M%S")
+                logger.info(f"✓ 접근 토큰 발급 성공 (만료: {KIWOOM_TOKEN_EXPIRY.strftime('%Y-%m-%d %H:%M')})")
+            except Exception:
+                KIWOOM_TOKEN_EXPIRY = datetime.now() + timedelta(hours=24)
+                logger.info("✓ 접근 토큰 발급 성공 (만료시각 파싱 실패, 24h 기본값 사용)")
             return token
         else:
             logger.error("✗ 접근 토큰 발급 실패")
             return None
-    
+
     except Exception as e:
         logger.error(f"✗ 토큰 발급 중 오류: {e}")
         return None
@@ -1107,15 +1118,33 @@ def run_simplified_monitoring_cycle():
     """
     단순화된 모니터링 사이클 실행 (Excel 기반)
     """
-    global KIWOOM_TOKEN
-    
+    global KIWOOM_TOKEN, KIWOOM_TOKEN_DATE, KIWOOM_TOKEN_EXPIRY
+
     try:
-        # 1. 접근 토큰 발급 (또는 재사용)
+        # 1. 접근 토큰 발급 / 갱신 체크
+        #    ① 토큰 없음  ② 날짜 변경  ③ 만료 1시간 이내 — 세 조건 중 하나라도 해당되면 갱신
+        now = datetime.now()
+        today_str = now.strftime("%Y%m%d")
+        need_refresh = False
         if not KIWOOM_TOKEN:
+            need_refresh = True
+            refresh_reason = "토큰 없음"
+        elif KIWOOM_TOKEN_DATE != today_str:
+            need_refresh = True
+            refresh_reason = f"날짜 변경 ({KIWOOM_TOKEN_DATE} → {today_str})"
+        elif KIWOOM_TOKEN_EXPIRY and (KIWOOM_TOKEN_EXPIRY - now).total_seconds() < 3600:
+            need_refresh = True
+            remaining = int((KIWOOM_TOKEN_EXPIRY - now).total_seconds() / 60)
+            refresh_reason = f"만료 {remaining}분 전 (예정: {KIWOOM_TOKEN_EXPIRY.strftime('%H:%M')})"
+
+        if need_refresh:
+            logger.info(f"🔄 토큰 갱신 [{refresh_reason}]")
+            KIWOOM_TOKEN = None
             KIWOOM_TOKEN = get_access_token(APPKEY, SECRETKEY)
             if not KIWOOM_TOKEN:
                 logger.error("✗ 토큰 발급 실패")
                 return False
+            KIWOOM_TOKEN_DATE = today_str
         
         # 2. Excel에서 종목과 매수선 로드
         df_summary = load_summary_stocks_with_buy_lines()
@@ -1130,7 +1159,8 @@ def run_simplified_monitoring_cycle():
         current_time = datetime.now()
         alert_count = 0
         checked_count = 0
-        
+        price_fail_count = 0  # 가격 조회 실패 카운터 (토큰 만료 감지용)
+
         for idx, row in df_summary.iterrows():
             ticker = str(row.get("티커", "")).zfill(6)
             stock_name = row.get("종목명", "")
@@ -1174,8 +1204,19 @@ def run_simplified_monitoring_cycle():
             # 확장된 가격 데이터 조회 (현재가, 저가만)
             price_data = get_enhanced_price_data(ticker, KIWOOM_TOKEN)
             if not price_data:
-                logger.warning(f"⚠ {stock_name}: 가격 데이터 조회 실패, 스킵")
-                continue
+                price_fail_count += 1
+                # 첫 10종목 중 5개 이상 실패 → 토큰 만료로 판단, 즉시 갱신
+                if checked_count <= 10 and price_fail_count >= 5:
+                    logger.warning(f"⚠ 연속 가격 조회 실패 {price_fail_count}회 — 토큰 만료 가능성, 갱신 중...")
+                    KIWOOM_TOKEN = get_access_token(APPKEY, SECRETKEY)
+                    if KIWOOM_TOKEN:
+                        KIWOOM_TOKEN_DATE = today_str
+                        logger.info("✓ 토큰 갱신 완료, 현재 종목 재시도...")
+                        price_data = get_enhanced_price_data(ticker, KIWOOM_TOKEN)
+                        price_fail_count = 0  # 리셋
+                if not price_data:
+                    logger.warning(f"⚠ {stock_name}: 가격 데이터 조회 실패, 스킵")
+                    continue
             
             current_price = price_data.get('current', 0)
             low_price = price_data.get('low', 0)
