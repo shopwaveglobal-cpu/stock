@@ -162,13 +162,12 @@ def send_slack_realtime_alert_block_kit(
                 header_text = alert_type.replace("매수선 ", f"매수선({int(round(target_price)):,}) ")
             else:
                 header_text = alert_type
-            # Header (시스템 라벨 제거, 이모지 + 알람 타입만)
+            # Section 블록을 첫 번째로: iOS 알람 미리보기가 이 텍스트를 사용
             blocks.append({
-                "type": "header",
+                "type": "section",
                 "text": {
-                    "type": "plain_text",
-                    "text": f"{emoji} {header_text}",
-                    "emoji": True
+                    "type": "mrkdwn",
+                    "text": f"*{emoji} {header_text} — {stock_name}*"
                 }
             })
             
@@ -202,16 +201,15 @@ def send_slack_realtime_alert_block_kit(
         
         # 매수 체결 알람인 경우
         else:
-            # Header (시스템 라벨 제거, 이모지 + 알람 타입만)
+            # Section 블록을 첫 번째로: iOS 알람 미리보기가 이 텍스트를 사용
             blocks.append({
-                "type": "header",
+                "type": "section",
                 "text": {
-                    "type": "plain_text",
-                    "text": f"{emoji} {alert_type}",
-                    "emoji": True
+                    "type": "mrkdwn",
+                    "text": f"*{emoji} {alert_type} — {stock_name}*"
                 }
             })
-            
+
             # Rich Text (종목 정보 + 매도가 정보) - preformatted 형식
             stock_info_text = (
                 f"종목: {stock_name}\n"
