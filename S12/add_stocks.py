@@ -95,8 +95,9 @@ for name, ticker in NEW_STOCKS:
         data = requests.post('https://api.kiwoom.com/api/dostk/chart',
             headers=HEADERS, json=b, timeout=10).json().get('stk_dt_pole_chart_qry',[])
 
+        # data[1:21]: 오늘 장중가 제외, 확정 종가만 사용 (장중 실행 시 정확도 유지)
         closes = []
-        for d in data[:20]:
+        for d in data[1:21]:
             raw = str(d.get('cur_prc','')).replace(',','').strip()
             if raw: closes.append(abs(int(raw)))
         closes.reverse()
@@ -108,7 +109,7 @@ for name, ticker in NEW_STOCKS:
 
         S20 = sum(closes); ma20 = S20/20
         S19 = S20 - closes[0]
-        cur = abs(int(str(data[0].get('cur_prc','')).replace(',','')))
+        cur = abs(int(str(data[0].get('cur_prc',data[1].get('cur_prc',0))).replace(',','')))
         b1 = calc_buy1(S19); b2 = calc_buy2(b1); b3 = calc_buy3(b2)
         high = abs(int(str(data[0].get('high_pric',cur)).replace(',','')))
         low  = abs(int(str(data[0].get('low_pric', cur)).replace(',','')))
@@ -166,14 +167,8 @@ added = 0
 for r in ok_results:
     t = str(r['ticker']).zfill(6)
     if t in existing_sum:
-        # 이미 있으면 익일 매수선만 갱신
-        idx = df_sum[df_sum['티커'].astype(str).str.zfill(6) == t].index
-        if len(idx):
-            df_sum.loc[idx[0], '1차매수선(익일)'] = r['b1']
-            df_sum.loc[idx[0], '2차매수선(익일)'] = r['b2']
-            df_sum.loc[idx[0], '3차매수선(익일)'] = r['b3']
-            df_sum.loc[idx[0], '20일선(익일)']   = r['ma20']
-            print(f"  ↺ {r['name']} ({t}): 매수선 갱신")
+        # 이미 있는 종목은 건드리지 않음 (기존 매수선 유지)
+        print(f"  — {r['name']} ({t}): 이미 존재, 스킵")
         continue
 
     # 신규 행 추가 (기존 Summary 컬럼 구조 그대로)
