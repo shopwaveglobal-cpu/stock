@@ -162,44 +162,34 @@ def send_slack_realtime_alert_block_kit(
                 header_text = alert_type.replace("매수선 ", f"매수선({int(round(target_price)):,}) ")
             else:
                 header_text = alert_type
-            # Section 블록을 첫 번째로: iOS 알람 미리보기가 이 텍스트를 사용
+            # section 블록 1: 헤더 — iOS 알람 미리보기에 이 텍스트가 표시됨
             blocks.append({
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*{emoji} {header_text} — {stock_name}*"
+                    "text": f"*{emoji} {header_text}*"
                 }
             })
-            
-            # Rich Text (종목 정보) - preformatted 형식
-            low_line = f"\n저가:   {int(low_price):,}원" if low_price else ""
-            stock_info_text = (
-                f"종목: {stock_name}\n"
-                f"현재가: {int(current_price):,}원"
-                f"{low_line}\n"
-                f"목표가: {int(round(target_price)) if target_price else 0:,}원\n"
-                f"이격도: {distance_pct:+.2f}%"
-            )
 
+            # section 블록 2: 본문 (rich_text 제거 — iOS 알람에 본문이 노출되는 원인)
+            low_line = f"\n저가:        {int(low_price):,}원" if low_price else ""
+            body_text = (
+                f"종목:        *{stock_name}*\n"
+                f"현재가:    {int(current_price):,}원"
+                f"{low_line}\n"
+                f"목표가:    *{int(round(target_price)) if target_price else 0:,}원*\n"
+                f"이격도:    {distance_pct:+.2f}%"
+            )
             blocks.append({
-                "type": "rich_text",
-                "elements": [
-                    {
-                        "type": "rich_text_preformatted",
-                        "elements": [
-                            {
-                                "type": "text",
-                                "text": stock_info_text
-                            }
-                        ]
-                    }
-                ]
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": body_text
+                }
             })
 
             # Divider
-            blocks.append({
-                "type": "divider"
-            })
+            blocks.append({"type": "divider"})
 
         # 매수 체결 알람인 경우
         else:
@@ -212,45 +202,35 @@ def send_slack_realtime_alert_block_kit(
                 }
             })
             
-            # Rich Text (종목 정보 + 매도가 정보) - preformatted 형식
-            low_line = f"\n저가:   {int(low_price):,}원" if low_price else ""
-            stock_info_text = (
-                f"종목: {stock_name}\n"
-                f"현재가: {int(current_price):,}원"
+            # section 블록 2: 본문 (rich_text 제거)
+            low_line = f"\n저가:        {int(low_price):,}원" if low_price else ""
+            body_text = (
+                f"종목:        *{stock_name}*\n"
+                f"현재가:    {int(current_price):,}원"
                 f"{low_line}\n"
-                f"목표가: {int(round(target_price)) if target_price else 0:,}원\n"
-                f"이격도: {distance_pct:+.2f}%"
+                f"목표가:    *{int(round(target_price)) if target_price else 0:,}원*\n"
+                f"이격도:    {distance_pct:+.2f}%"
             )
-            
-            # 매도가 정보 추가
+
+            # 매도가 정보 추가 (매수 체결 시)
             if sell_prices:
-                stock_info_text += "\n"
                 if sell_prices.get('sell1'):
-                    stock_info_text += f"\n3% 매도가: {int(round(sell_prices.get('sell1', 0))) if sell_prices.get('sell1') else 0:,}원"
+                    body_text += f"\n3% 매도가: {int(round(sell_prices['sell1'])):,}원"
                 if sell_prices.get('sell2'):
-                    stock_info_text += f"\n5% 매도가: {int(round(sell_prices.get('sell2', 0))) if sell_prices.get('sell2') else 0:,}원"
+                    body_text += f"\n5% 매도가: {int(round(sell_prices['sell2'])):,}원"
                 if sell_prices.get('sell3'):
-                    stock_info_text += f"\n7% 매도가: {int(round(sell_prices.get('sell3', 0))) if sell_prices.get('sell3') else 0:,}원"
-            
+                    body_text += f"\n7% 매도가: {int(round(sell_prices['sell3'])):,}원"
+
             blocks.append({
-                "type": "rich_text",
-                "elements": [
-                    {
-                        "type": "rich_text_preformatted",
-                        "elements": [
-                            {
-                                "type": "text",
-                                "text": stock_info_text
-                            }
-                        ]
-                    }
-                ]
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": body_text
+                }
             })
-            
+
             # Divider
-            blocks.append({
-                "type": "divider"
-            })
+            blocks.append({"type": "divider"})
         
         # Fallback 텍스트 (미리보기에 목표가 포함)
         fallback_text = f"{emoji} {header_text} - {stock_name}"
