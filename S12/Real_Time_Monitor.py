@@ -610,12 +610,12 @@ def check_simplified_alert(
         logger.warning(f"⚠ {stock_name} ({ticker}): 매수선 데이터 없음 (buy1:{buy1}, buy2:{buy2}, buy3:{buy3})")
         return False
     
-    # 시스템 라벨 감지: SIGNAL_FILE에 따라 S1 또는 S2 설정
+    # 시스템 라벨 감지: SIGNAL_FILE에 따라 S1 또는 S12 설정
     system_label = None
     if "s1" in SIGNAL_FILE.lower() or "s1_signals" in SIGNAL_FILE.lower():
         system_label = "S1"
     elif "trading_signals" in SIGNAL_FILE.lower():
-        system_label = "S2"
+        system_label = "S12"
     
     alerts = history.get("alerts", {})
     ticker_alerts = alerts.get(ticker, {})

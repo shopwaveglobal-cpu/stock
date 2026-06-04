@@ -173,13 +173,15 @@ def send_slack_realtime_alert_block_kit(
             })
             
             # Rich Text (종목 정보) - preformatted 형식
+            low_line = f"\n저가:   {int(low_price):,}원" if low_price else ""
             stock_info_text = (
                 f"종목: {stock_name}\n"
-                f"현재가: {int(current_price):,}원\n"
+                f"현재가: {int(current_price):,}원"
+                f"{low_line}\n"
                 f"목표가: {int(round(target_price)) if target_price else 0:,}원\n"
                 f"이격도: {distance_pct:+.2f}%"
             )
-            
+
             blocks.append({
                 "type": "rich_text",
                 "elements": [
@@ -194,12 +196,12 @@ def send_slack_realtime_alert_block_kit(
                     }
                 ]
             })
-            
+
             # Divider
             blocks.append({
                 "type": "divider"
             })
-        
+
         # 매수 체결 알람인 경우
         else:
             # Header (시스템 라벨 제거, 이모지 + 알람 타입만)
@@ -213,9 +215,11 @@ def send_slack_realtime_alert_block_kit(
             })
             
             # Rich Text (종목 정보 + 매도가 정보) - preformatted 형식
+            low_line = f"\n저가:   {int(low_price):,}원" if low_price else ""
             stock_info_text = (
                 f"종목: {stock_name}\n"
-                f"현재가: {int(current_price):,}원\n"
+                f"현재가: {int(current_price):,}원"
+                f"{low_line}\n"
                 f"목표가: {int(round(target_price)) if target_price else 0:,}원\n"
                 f"이격도: {distance_pct:+.2f}%"
             )
