@@ -1,97 +1,129 @@
-<<<<<<< HEAD
-# S1 Trading System
+# S1 — 시가총액 기반 실시간 매수선 모니터링 시스템
 
-시가총액 기반 주식 트레이딩 시스템
+시가총액 1.3조원 이상 종목을 자동 선정하고, MA20 기반 매수선에 접근하면 실시간 알람을 발송하는 시스템.
 
-## 개요
+---
 
-S1 시스템은 **시가총액 1조 3천억원 이상** 종목을 대상으로 기술적 분석 기반 매매 신호를 생성하는 시스템입니다.
+## 시스템 구조
 
-## 주요 구성 요소
+```
+1단계: 종목 선정 (S1 전용)
+  Daily_MarketCap_Tracker.py
+  → 시가총액 1.3조+ 종목 필터 (코스피/코스닥)
+  → output/marketcap_universe.xlsx
 
-### 1. Daily Market Cap Tracker (`Daily_MarketCap_Tracker.py`)
-- 매일 시가총액 1조 3천억원 이상 종목 수집
-- 키움 API `ka10099`를 사용하여 종목 리스트 조회
-- 시가총액 계산: 상장주식수 × 전일종가
-- 결과 저장: `output/marketcap_universe.xlsx`
+         ↓ (매일 20:15 자동 실행)
 
-### 2. Trading Signal System (`Trading_Signal_System_S1.py`)
-- `marketcap_universe.xlsx`의 종목들을 분석
-- 20일 이동평균선 기반 매수/매도 신호 생성
-- 엔벨로프(-20%) 지지선 계산
-- 3단계 매수선/매도선 계산
-- 결과 저장: `output/trading_signals_s1.xlsx`
+2단계: 매수선 계산 [S12와 공유 코드]
+  Trading_Signal_System.py --label S1
+  → MA20, 1/2/3차 매수선, 1/2/3차 매도선 계산
+  → output/trading_signals_s1.xlsx (Summary + History 탭)
+  → 텔레그램/슬랙 일일 리포트 발송 [S1]
 
-### 3. Real-Time Monitor (`Real_Time_Monitor_S1.py`)
-- 실시간 가격 모니터링
-- 매수/매도선 접근 시 텔레그램 알림
-- 체결 시 즉시 알림
+         ↓ (상시 실행, 거래일 08:00-20:00)
 
-## 설치 및 실행
-
-### 1. 패키지 설치
-```bash
-pip install -r requirements.txt
+3단계: 실시간 감시 [S12와 공유 코드]
+  Real_Time_Monitor.py --label S1 --signal-file output/trading_signals_s1.xlsx
+  → 60초마다 전 종목 현재가/저가 조회 (키움 API)
+  → 저가 기준 매수선 5%/3%/1% 인접 → 알람
+  → 저가 <= 매수선 → 체결 알람
+  → 텔레그램 + 슬랙 발송 [S1]
 ```
 
-### 2. 환경 변수 설정
-`.env` 파일 생성:
-```
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
-KIWOOM_APPKEY=your_appkey
-KIWOOM_SECRET=your_secret
-```
+---
 
-### 3. 일일 실행
-```bash
+## 매수선 계산 방식
+
+- **기준**: MA20 (20일 이동평균선의 전일 기준값 S19 사용)
+- **1차 매수선**: `ceil_tick(S19 / 24)` — 호가 단위 올림
+- **2차 매수선**: `ceil_tick(1차 × 0.90)`
+- **3차 매수선**: `ceil_tick(2차 × 0.90)`
+- **매도선**: 1차 매수가 기준 +3% / +5% / +7%
+
+---
+
+## 알람 조건
+
+| 조건 | 트리거 | 이모지 |
+|------|--------|--------|
+| 매수선 5% 이내 접근 | 당일 저가 기준 | 🟡 |
+| 매수선 3% 이내 접근 | 당일 저가 기준 | 🟠 |
+| 매수선 1% 이내 접근 | 당일 저가 기준 | 🔴 |
+| 매수선 터치 (체결) | 저가 <= 매수선 | 🎯 |
+
+- 하루 1회 중복 방지 (`alert_history.json`, 자정 초기화)
+- 매수 상태에 따라 감시 대상 매수선 자동 전환 (NONE→1차, BOUGHT_1→2차, BOUGHT_2→3차)
+
+---
+
+## 실행 방법
+
+### 수동 실행
+
+```bat
+# 1단계: 유니버스 갱신 + 매수선 계산
 RUN_S1_DAILY.bat
-```
-또는
-```bash
-python Daily_MarketCap_Tracker.py --appkey YOUR_APPKEY --secret YOUR_SECRET
-python Trading_Signal_System_S1.py --appkey YOUR_APPKEY --secret YOUR_SECRET --alert-threshold 10.0
+
+# 개별 실행
+python Daily_MarketCap_Tracker.py --appkey APPKEY --secret SECRET
+python Trading_Signal_System.py --appkey APPKEY --secret SECRET --label S1 --universe output/marketcap_universe.xlsx --signal output/trading_signals_s1.xlsx
+
+# 실시간 모니터 (수동 시작)
+python Real_Time_Monitor.py --appkey APPKEY --secret SECRET --label S1 --signal-file output/trading_signals_s1.xlsx --interval 60
 ```
 
-### 4. 실시간 모니터링
-```bash
-run_s1_realtime.bat
-```
+### 자동 실행 (Task Scheduler)
+
+| 태스크 | 시각 | 내용 |
+|--------|------|------|
+| `S1_Daily_Trading_Signal` | 매일 20:15 | 유니버스 갱신 + 매수선 계산 + 일일 리포트 |
+| `S1_Realtime_Monitor` | 로그인 시 | 실시간 모니터 시작 (watchdog 포함) |
+| `S1_S12_Daily_Restart_7h` | 매일 07:00 | 토큰 갱신을 위한 모니터 재시작 |
+
+---
 
 ## 파일 구조
 
 ```
 S1/
-├── Daily_MarketCap_Tracker.py      # 시가총액 유니버스 수집
-├── Trading_Signal_System_S1.py    # 매매 신호 생성
-├── Real_Time_Monitor_S1.py         # 실시간 모니터링
-├── telegram_notifier.py            # 텔레그램 알림
+├── Daily_MarketCap_Tracker.py      # 1단계: 시가총액 유니버스 수집 (S1 전용)
+├── Trading_Signal_System.py        # 2단계: 매수선 계산 [S12와 공유, S12가 소스]
+├── Real_Time_Monitor.py            # 3단계: 실시간 감시 [S12와 공유, S12가 소스]
+├── telegram_notifier.py            # 텔레그램 알람 모듈
+├── slack_notifier.py               # 슬랙 알람 모듈 (Block Kit)
 ├── trading_day_utils.py            # 거래일 체크 유틸리티
-├── contact_price_calculator.py    # 호가 계산 유틸리티
-├── requirements.txt                # Python 패키지 목록
-├── output/                         # 출력 파일
-│   ├── marketcap_universe.xlsx
-│   └── trading_signals_s1.xlsx
-└── logs/                          # 로그 파일
+│
+├── RUN_S1_DAILY.bat                # 2단계 수동/자동 실행
+├── S1_self_restart.bat             # 3단계 자동 재시작 루프
+├── S1_smart_restart.ps1            # watchdog용 스마트 재시작
+├── S1_restart_monitor.ps1          # 07:00 일일 재시작용 kill 스크립트
+├── S1_start_monitor.vbs            # 백그라운드 시작 (Session 0 대응)
+│
+├── output/
+│   ├── marketcap_universe.xlsx     # 유니버스 (1단계 출력)
+│   └── trading_signals_s1.xlsx     # 매수선 + 알람 상태 (2단계 출력, 3단계 입력)
+│
+├── alert_history.json              # 당일 알람 발송 기록 (자정 초기화)
+├── realtime_monitor.lock           # 중복 실행 방지 락 파일
+└── logs/
+    └── s1_daily_YYYYMMDD.log       # 2단계 실행 로그
 ```
 
-## 알림 시스템
+> **주의**: `Trading_Signal_System.py`, `Real_Time_Monitor.py`는 S12 디렉토리가 소스입니다.
+> 코드 수정 시 S12에서 수정 후 이 폴더로 복사하세요.
+> ```powershell
+> Copy-Item ..\S12\Real_Time_Monitor.py .\Real_Time_Monitor.py -Force
+> Copy-Item ..\S12\Trading_Signal_System.py .\Trading_Signal_System.py -Force
+> ```
 
-- **일일 리포트**: 매일 거래일 종료 후 전송 (접근 중인 종목 요약)
-- **실시간 알림**: 매수/매도선 접근 시 즉시 전송
-- **알림 접두사**: `[S1]` 사용
+---
 
-## S2 시스템과의 차이
+## S12와의 차이
 
-- **S2**: 거래대금 상위 종목 기반 (`turnover_universe.xlsx`)
-- **S1**: 시가총액 상위 종목 기반 (`marketcap_universe.xlsx`)
-- 두 시스템은 독립적으로 운영되며, 별도의 텔레그램 알림을 제공합니다.
-
-## 라이선스
-
-Private
-
-=======
-# S1
-S1 
->>>>>>> aef0ade7554fd192baa4e2ef3bb2af5994b53ff5
+| 항목 | S1 | S12 |
+|------|-----|------|
+| 종목 선정 | 시가총액 1.3조+ 자동 편입 | 수동 큐레이션 (`add_stocks.py`) |
+| 유니버스 | `marketcap_universe.xlsx` | `turnover_universe.xlsx` |
+| 신호 파일 | `trading_signals_s1.xlsx` | `trading_signals.xlsx` |
+| 알람 라벨 | `[S1]` | `[S12]` |
+| 2/3단계 코드 | S12와 동일 | 소스 |
