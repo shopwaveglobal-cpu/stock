@@ -1,12 +1,13 @@
 """
-Real-time Stock Monitoring System
+Real-time Stock Monitoring System (24/7 Forever Edition)
 
-실시간 주식 모니터링 시스템 (거래일 08:00-20:00, 10분 간격)
+실시간 주식 모니터링 시스템 (24시간 무한 실행, 거래시간만 작동)
 - Summary 탭의 종목만 모니터링
 - 현재가 기반 동적 20일선 계산
 - 매수선 5% 이내 접근 시 알람
 - 상태별 하루 1회 알람 (중복 방지)
-- 주말/공휴일에는 모니터링 중단
+- 비거래시간/비거래일에는 대기 상태
+- 종료되지 않고 무한 실행 (24/7)
 """
 
 import sys
@@ -45,7 +46,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 상수
-SIGNAL_FILE = "output/trading_signals_s1.xlsx"  # S1 시스템 실시간 모니터링용 (Summary 탭)
+SIGNAL_FILE = "output/trading_signals.xlsx"  # 일반 실시간 모니터링용 (Summary 탭)
 ALERT_HISTORY_FILE = "alert_history.json"
 MONITORING_START_TIME = time_type(8, 0)  # 08:00
 MONITORING_END_TIME = time_type(20, 0)   # 20:00
@@ -55,14 +56,19 @@ DISTANCE_THRESHOLD = 5.0  # 5% 이내 접근 시 알람
 KIWOOM_BASE_URL = "https://api.kiwoom.com"
 KIWOOM_TOKEN_URL = "https://api.kiwoom.com/oauth2/token"
 KIWOOM_TOKEN = None
+KIWOOM_TOKEN_DATE = None      # 토큰 발급 날짜 (날짜 변경 시 자동 갱신)
+KIWOOM_TOKEN_EXPIRY = None    # 토큰 만료 시각 (datetime) — expires_dt 기반 정밀 갱신
 APPKEY = None
 SECRETKEY = None
+SYSTEM_LABEL = None           # 시스템 라벨 (S1/S12). None = SIGNAL_FILE 자동 감지
 
 
 def get_access_token(appkey: str, secretkey: str) -> Optional[str]:
     """
-    키움 API 접근 토큰 발급
+    키움 API 접근 토큰 발급.
+    성공 시 전역 KIWOOM_TOKEN_EXPIRY 도 업데이트.
     """
+    global KIWOOM_TOKEN_EXPIRY
     try:
         headers = {"Content-Type": "application/json;charset=UTF-8"}
         body = {
@@ -70,20 +76,28 @@ def get_access_token(appkey: str, secretkey: str) -> Optional[str]:
             "appkey": appkey,
             "secretkey": secretkey
         }
-        
+
         response = requests.post(KIWOOM_TOKEN_URL, headers=headers, json=body, timeout=20)
         response.raise_for_status()
-        
+
         result = response.json()
         token = result.get("token") or result.get("access_token")
-        
+
         if token:
-            logger.info("✓ 접근 토큰 발급 성공")
+            # expires_dt 파싱 (형식: "20260529201000" = yyyyMMddHHmmss)
+            expires_dt_str = result.get("expires_dt", "")
+            try:
+                KIWOOM_TOKEN_EXPIRY = datetime.strptime(expires_dt_str, "%Y%m%d%H%M%S")
+                logger.info(f"✓ 접근 토큰 발급 성공 (만료: {KIWOOM_TOKEN_EXPIRY.strftime('%Y-%m-%d %H:%M')})")
+            except Exception:
+                # 파싱 실패 시 발급 후 24시간으로 보수적 설정
+                KIWOOM_TOKEN_EXPIRY = datetime.now() + timedelta(hours=24)
+                logger.info(f"✓ 접근 토큰 발급 성공 (만료시각 파싱 실패, 24h 기본값 사용)")
             return token
         else:
             logger.error("✗ 접근 토큰 발급 실패")
             return None
-    
+
     except Exception as e:
         logger.error(f"✗ 토큰 발급 중 오류: {e}")
         return None
@@ -518,7 +532,7 @@ def get_sell_prices_from_excel(ticker: str) -> dict:
     """Excel에서 해당 종목의 매도가 정보를 가져오는 함수"""
     try:
         import pandas as pd
-        df = pd.read_excel(SIGNAL_FILE, sheet_name='Summary', dtype={'티커': str})
+        df = pd.read_excel('output/trading_signals.xlsx', sheet_name='Summary', dtype={'티커': str})
         
         # 해당 티커의 행 찾기
         stock_row = df[df['티커'] == ticker]
@@ -597,12 +611,15 @@ def check_simplified_alert(
         logger.warning(f"⚠ {stock_name} ({ticker}): 매수선 데이터 없음 (buy1:{buy1}, buy2:{buy2}, buy3:{buy3})")
         return False
     
-    # 시스템 라벨 감지: SIGNAL_FILE에 따라 S1 또는 S2 설정
-    system_label = None
-    if "s1" in SIGNAL_FILE.lower() or "s1_signals" in SIGNAL_FILE.lower():
+    # 시스템 라벨: --label 인자 우선, 없으면 SIGNAL_FILE 자동 감지
+    if SYSTEM_LABEL:
+        system_label = SYSTEM_LABEL
+    elif "s1" in SIGNAL_FILE.lower() or "s1_signals" in SIGNAL_FILE.lower():
         system_label = "S1"
     elif "trading_signals" in SIGNAL_FILE.lower():
-        system_label = "S2"
+        system_label = "S12"
+    else:
+        system_label = None
     
     alerts = history.get("alerts", {})
     ticker_alerts = alerts.get(ticker, {})
@@ -661,6 +678,9 @@ def check_simplified_alert(
                 return True
         else:
             # 매수선 인접 알람 (1%, 3%, 5%)
+            # 당일 이미 1차 매수 체결된 경우 근접 알람 전부 스킵
+            if ticker_alerts.get("BUY1_EXECUTED", False):
+                return False
             # 우선순위: 1% > 3% > 5% (이미 전송된 알람은 스킵)
             if 0 < low_dist_buy1 <= 1:
                 alert_key = "BUY1_1PCT"
@@ -768,6 +788,9 @@ def check_simplified_alert(
                 return True
         else:
             # 2차 매수선 인접 알람
+            # 당일 이미 2차 매수 체결된 경우 근접 알람 전부 스킵
+            if ticker_alerts.get("BUY2_EXECUTED", False):
+                return False
             if 0 < low_dist_buy2 <= 1:
                 alert_key = "BUY2_1PCT"
                 alert_type = "2차 매수선 1% 인접"
@@ -867,6 +890,9 @@ def check_simplified_alert(
                 return True
         else:
             # 3차 매수선 인접 알람
+            # 당일 이미 3차 매수 체결된 경우 근접 알람 전부 스킵
+            if ticker_alerts.get("BUY3_EXECUTED", False):
+                return False
             if 0 < low_dist_buy3 <= 1:
                 alert_key = "BUY3_1PCT"
                 alert_type = "3차 매수선 1% 인접"
@@ -942,15 +968,33 @@ def run_simplified_monitoring_cycle():
     """
     단순화된 모니터링 사이클 실행 (Excel 기반)
     """
-    global KIWOOM_TOKEN
-    
+    global KIWOOM_TOKEN, KIWOOM_TOKEN_DATE, KIWOOM_TOKEN_EXPIRY
+
     try:
-        # 1. 접근 토큰 발급 (또는 재사용)
+        # 1. 접근 토큰 발급 / 갱신 체크
+        #    ① 토큰 없음  ② 날짜 변경  ③ 만료 1시간 이내 — 세 조건 중 하나라도 해당되면 갱신
+        now = datetime.now()
+        today_str = now.strftime("%Y%m%d")
+        need_refresh = False
         if not KIWOOM_TOKEN:
+            need_refresh = True
+            refresh_reason = "토큰 없음"
+        elif KIWOOM_TOKEN_DATE != today_str:
+            need_refresh = True
+            refresh_reason = f"날짜 변경 ({KIWOOM_TOKEN_DATE} → {today_str})"
+        elif KIWOOM_TOKEN_EXPIRY and (KIWOOM_TOKEN_EXPIRY - now).total_seconds() < 3600:
+            need_refresh = True
+            remaining = int((KIWOOM_TOKEN_EXPIRY - now).total_seconds() / 60)
+            refresh_reason = f"만료 {remaining}분 전 (예정: {KIWOOM_TOKEN_EXPIRY.strftime('%H:%M')})"
+
+        if need_refresh:
+            logger.info(f"🔄 토큰 갱신 [{refresh_reason}]")
+            KIWOOM_TOKEN = None
             KIWOOM_TOKEN = get_access_token(APPKEY, SECRETKEY)
             if not KIWOOM_TOKEN:
                 logger.error("✗ 토큰 발급 실패")
                 return False
+            KIWOOM_TOKEN_DATE = today_str
         
         # 2. Excel에서 종목과 매수선 로드
         df_summary = load_summary_stocks_with_buy_lines()
@@ -965,7 +1009,8 @@ def run_simplified_monitoring_cycle():
         current_time = datetime.now()
         alert_count = 0
         checked_count = 0
-        
+        price_fail_count = 0  # 가격 조회 실패 카운터 (토큰 만료 감지용)
+
         for idx, row in df_summary.iterrows():
             ticker = str(row.get("티커", "")).zfill(6)
             stock_name = row.get("종목명", "")
@@ -1001,8 +1046,19 @@ def run_simplified_monitoring_cycle():
             # 확장된 가격 데이터 조회 (현재가, 저가만)
             price_data = get_enhanced_price_data(ticker, KIWOOM_TOKEN)
             if not price_data:
-                logger.warning(f"⚠ {stock_name}: 가격 데이터 조회 실패, 스킵")
-                continue
+                price_fail_count += 1
+                # 첫 10종목 중 5개 이상 실패 → 토큰 만료로 판단, 즉시 갱신
+                if checked_count <= 10 and price_fail_count >= 5:
+                    logger.warning(f"⚠ 연속 가격 조회 실패 {price_fail_count}회 — 토큰 만료 가능성, 갱신 중...")
+                    KIWOOM_TOKEN = get_access_token(APPKEY, SECRETKEY)
+                    if KIWOOM_TOKEN:
+                        KIWOOM_TOKEN_DATE = today_str
+                        logger.info("✓ 토큰 갱신 완료, 현재 종목 재시도...")
+                        price_data = get_enhanced_price_data(ticker, KIWOOM_TOKEN)
+                        price_fail_count = 0  # 리셋
+                if not price_data:
+                    logger.warning(f"⚠ {stock_name}: 가격 데이터 조회 실패, 스킵")
+                    continue
             
             current_price = price_data.get('current', 0)
             low_price = price_data.get('low', 0)
@@ -1047,7 +1103,7 @@ def run_simplified_monitoring_cycle():
         
         try:
             from telegram_notifier import send_error_alert
-            send_error_alert(str(e), "Real_Time_Monitor_S1", recipients=["me"])  # 에러는 본인만
+            send_error_alert(str(e), "Real_Time_Monitor_S12", recipients=["me"])  # 에러는 본인만
         except:
             pass
         
@@ -1057,29 +1113,123 @@ def run_simplified_monitoring_cycle():
 # run_monitoring_cycle 함수 제거 - 단순화된 버전으로 교체됨
 
 
+LOCK_FILE = "realtime_monitor.lock"
+
+
+def acquire_lock() -> bool:
+    """
+    중복 실행 방지용 락 파일 획득.
+    이미 실행 중인 인스턴스가 있으면 False 반환.
+    """
+    import os
+    import atexit
+    import subprocess
+
+    def pid_is_running(pid: int) -> bool:
+        """Windows에서 해당 PID가 살아있는지 확인"""
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"],
+                capture_output=True, text=True, timeout=5
+            )
+            return str(pid) in result.stdout
+        except Exception:
+            return False
+
+    if os.path.exists(LOCK_FILE):
+        try:
+            with open(LOCK_FILE, "r") as f:
+                existing_pid = int(f.read().strip())
+            if pid_is_running(existing_pid):
+                logger.error(
+                    f"✗ 이미 실행 중인 모니터가 있습니다 (PID: {existing_pid}). 종료합니다."
+                )
+                logger.error("  기존 프로세스를 먼저 종료하거나 락 파일을 삭제하세요: " + LOCK_FILE)
+                return False
+            else:
+                logger.warning(f"⚠ 죽은 프로세스의 락 파일 발견 (PID: {existing_pid}). 덮어씁니다.")
+        except (ValueError, OSError):
+            logger.warning("⚠ 락 파일 읽기 실패. 덮어씁니다.")
+
+    with open(LOCK_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+    def release_lock():
+        try:
+            if os.path.exists(LOCK_FILE):
+                with open(LOCK_FILE, "r") as f:
+                    pid = int(f.read().strip())
+                if pid == os.getpid():
+                    os.remove(LOCK_FILE)
+        except Exception:
+            pass
+
+    atexit.register(release_lock)
+    return True
+
+
+def is_lock_holder() -> bool:
+    """현재 프로세스가 락 파일의 보유자인지 확인. 다른 프로세스가 재시작하면 False."""
+    import os
+    try:
+        if not os.path.exists(LOCK_FILE):
+            return False
+        with open(LOCK_FILE, "r") as f:
+            return int(f.read().strip()) == os.getpid()
+    except Exception:
+        return False
+
+
+def sleep_with_lock_check(seconds: float):
+    """지정 시간 동안 대기하되 60초마다 락 보유 여부 확인. 락 잃으면 즉시 종료."""
+    import time as _time
+    end = _time.time() + seconds
+    while _time.time() < end:
+        if not is_lock_holder():
+            logger.info("⚠ 락 파일이 다른 프로세스에 의해 갱신됨 — 이 프로세스를 종료합니다.")
+            sys.exit(0)
+        _time.sleep(max(0, min(60, end - _time.time())))
+
+
 def main():
     """
     메인 함수 - 단순화된 실시간 모니터링 (Excel 기반)
     """
     global APPKEY, SECRETKEY, KIWOOM_TOKEN
-    
+
     # 인자 파싱
     parser = argparse.ArgumentParser(description="실시간 주식 모니터링 (Excel 기반)")
     parser.add_argument("--appkey", required=True, help="키움 APPKEY")
     parser.add_argument("--secret", required=True, help="키움 SECRETKEY")
     parser.add_argument("--interval", type=int, default=60, help="모니터링 간격 (초, 기본값: 60)")
     parser.add_argument("--force", action="store_true", help="거래일 체크 무시하고 강제 실행")
-    parser.add_argument("--signal-file", type=str, help="시그널 파일 경로 (기본값: output/trading_signals_s1.xlsx)")
+    parser.add_argument("--signal-file", type=str, help="시그널 파일 경로 (기본값: output/trading_signals.xlsx)")
+    parser.add_argument("--label", type=str, default=None, help="시스템 라벨 (S1/S12). 기본: signal-file 자동 감지")
+    parser.add_argument("--alert-file", type=str, default=None, help="알람 히스토리 파일 경로 (기본값: alert_history.json)")
+    parser.add_argument("--lock-file", type=str, default=None, help="락 파일 경로 (기본값: realtime_monitor.lock)")
     args = parser.parse_args()
     
     APPKEY = args.appkey
     SECRETKEY = args.secret
     base_interval = args.interval
-    
-    # signal-file 파라미터가 있으면 SIGNAL_FILE 변경
+
+    # 중복 실행 방지
+    if not acquire_lock():
+        sys.exit(1)
+
+    # signal-file / label / alert-file / lock-file 파라미터 반영
     if args.signal_file:
         global SIGNAL_FILE
         SIGNAL_FILE = args.signal_file
+    if args.label:
+        global SYSTEM_LABEL
+        SYSTEM_LABEL = args.label
+    if args.alert_file:
+        global ALERT_HISTORY_FILE
+        ALERT_HISTORY_FILE = args.alert_file
+    if args.lock_file:
+        global LOCK_FILE
+        LOCK_FILE = args.lock_file
     
     logger.info("=" * 80)
     logger.info("🔍 실시간 주식 모니터링 시작 (Excel 기반 단순화 버전)")
@@ -1095,7 +1245,12 @@ def main():
     while True:
         cycle_count += 1
         current_time = datetime.now()
-        
+
+        # 루프 상단: 락 보유 여부 확인 (재시작으로 락을 잃었으면 즉시 종료)
+        if not is_lock_holder():
+            logger.info("⚠ 락 파일이 다른 프로세스에 의해 갱신됨 — 이 프로세스를 종료합니다.")
+            sys.exit(0)
+
         # 모니터링 시간대 체크 (강제 실행 옵션이 없는 경우에만)
         if not args.force:
             if not is_monitoring_time():
@@ -1103,29 +1258,42 @@ def main():
                 trading_info = get_trading_day_info()
                 if not trading_info['is_trading_day']:
                     logger.info(f"\n[사이클 {cycle_count}] 비거래일입니다 ({trading_info['reason']})")
-                    logger.info("모니터링 종료 - 비거래일")
-                    break
+                    logger.info("⏰ 1시간 후 재확인... (비거래일 대기 중)")
+                    sleep_with_lock_check(3600)
+                    continue
                 else:
                     logger.info(f"\n[사이클 {cycle_count}] 모니터링 시간대가 아닙니다 (거래일 08:00-20:00)")
-                    # 20:00 이후면 종료
+                    # 20:00 이후면 다음날 08:00까지 대기
                     if current_time.time() >= MONITORING_END_TIME:
-                        logger.info("장 시간 종료 - 모니터링 종료")
-                        break
+                        logger.info("장 시간 종료 - 다음날 08:00까지 대기 중...")
+                        from datetime import timedelta
+                        next_day = current_time + timedelta(days=1)
+                        next_morning = next_day.replace(hour=8, minute=0, second=0, microsecond=0)
+                        wait_seconds = (next_morning - current_time).total_seconds()
+                        logger.info(f"⏰ {wait_seconds/3600:.1f}시간 대기...")
+                        sleep_with_lock_check(wait_seconds if wait_seconds > 0 else 3600)
+                        continue
                     # 08:00 이전이면 대기
                     logger.info(f"⏰ {base_interval}초 후 재확인...")
                     logger.info("강제 실행하려면 --force 옵션을 사용하세요.")
-                    time.sleep(base_interval)
+                    sleep_with_lock_check(base_interval)
                     continue
         else:
             # 강제 실행 모드에서는 시간대만 체크
             if not is_monitoring_time(force_mode=True):
-                # 20:00 이후면 종료
+                # 20:00 이후면 다음날 08:00까지 대기
                 if current_time.time() >= MONITORING_END_TIME:
-                    logger.info("장 시간 종료 - 모니터링 종료")
-                    break
+                    logger.info("장 시간 종료 - 다음날 08:00까지 대기 중...")
+                    from datetime import timedelta
+                    next_day = current_time + timedelta(days=1)
+                    next_morning = next_day.replace(hour=8, minute=0, second=0, microsecond=0)
+                    wait_seconds = (next_morning - current_time).total_seconds()
+                    logger.info(f"⏰ {wait_seconds/3600:.1f}시간 대기...")
+                    sleep_with_lock_check(wait_seconds if wait_seconds > 0 else 3600)
+                    continue
                 logger.info(f"\n[사이클 {cycle_count}] 모니터링 시간대가 아닙니다 (08:00-20:00)")
                 logger.info(f"⏰ {base_interval}초 후 재확인...")
-                time.sleep(base_interval)
+                sleep_with_lock_check(base_interval)
                 continue
         
         logger.info(f"\n{'=' * 80}")
@@ -1143,7 +1311,7 @@ def main():
         logger.info(f"   종료하려면 Ctrl+C를 누르세요.")
         
         try:
-            time.sleep(base_interval)
+            sleep_with_lock_check(base_interval)
         except KeyboardInterrupt:
             logger.info("\n" + "=" * 80)
             logger.info("[STOP] 사용자가 모니터링을 중지했습니다.")

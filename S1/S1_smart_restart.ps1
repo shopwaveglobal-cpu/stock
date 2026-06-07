@@ -18,7 +18,7 @@ try {
     if ($h -eq 7 -or -not $loop) {
         # kill 기존 프로세스 (taskkill /F 사용)
         $targets = Get-WmiObject Win32_Process | Where-Object {
-            ($_.Name -eq "python.exe" -and $_.CommandLine -like "*Real_Time_Monitor_S1*") -or
+            ($_.Name -eq "python.exe" -and $_.CommandLine -like "*Real_Time_Monitor*" -and $_.CommandLine -like "*--label S1*") -or
             ($_.Name -eq "cmd.exe" -and $_.CommandLine -like "*S1_self_restart*")
         }
         foreach ($p in $targets) {

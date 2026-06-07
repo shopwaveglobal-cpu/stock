@@ -43,7 +43,7 @@ echo [2/2] Trading Signal Generation...
 echo ========================================
 echo [2/2] Trading Signal Generation... >> "%LOG_FILE%"
 
-python Trading_Signal_System_S1.py --appkey IweTdkYa8JWDUOa8NohVSVeOiJ1THDGd_2x050A8XcU --secret eazu-jPNJpAsIVkaUTh3_88gUvXrCMJCwGF2AYRtBJs --alert-threshold 10.0 >> "%LOG_FILE%" 2>&1
+python Trading_Signal_System.py --appkey IweTdkYa8JWDUOa8NohVSVeOiJ1THDGd_2x050A8XcU --secret eazu-jPNJpAsIVkaUTh3_88gUvXrCMJCwGF2AYRtBJs --alert-threshold 10.0 --label S1 --universe output/marketcap_universe.xlsx --signal output/trading_signals_s1.xlsx >> "%LOG_FILE%" 2>&1
 
 if %ERRORLEVEL% neq 0 (
     echo ERROR: Trading Signal System S1 failed! >> "%LOG_FILE%"

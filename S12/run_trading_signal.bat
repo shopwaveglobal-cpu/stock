@@ -50,7 +50,7 @@ echo [2/2] Trading Signal Generation...
 echo ========================================
 echo [2/2] Trading Signal Generation... >> "%LOG_FILE%"
 
-C:\Python314\python.exe Trading_Signal_System.py --appkey IweTdkYa8JWDUOa8NohVSVeOiJ1THDGd_2x050A8XcU --secret eazu-jPNJpAsIVkaUTh3_88gUvXrCMJCwGF2AYRtBJs --alert-threshold 10.0 >> "%LOG_FILE%" 2>&1
+C:\Python314\python.exe Trading_Signal_System.py --appkey IweTdkYa8JWDUOa8NohVSVeOiJ1THDGd_2x050A8XcU --secret eazu-jPNJpAsIVkaUTh3_88gUvXrCMJCwGF2AYRtBJs --alert-threshold 10.0 --label S12 >> "%LOG_FILE%" 2>&1
 
 if %ERRORLEVEL% neq 0 (
     echo ERROR: Trading Signal System failed! >> "%LOG_FILE%"

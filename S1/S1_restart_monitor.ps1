@@ -1,7 +1,7 @@
 Set-Location "C:\Users\log\Desktop\Code\S1"
 
 # S1 python 프로세스 종료
-$procs = @(Get-WmiObject Win32_Process | Where-Object { $_.Name -eq "python.exe" -and $_.CommandLine -match "Real_Time_Monitor_S1" })
+$procs = @(Get-WmiObject Win32_Process | Where-Object { $_.Name -eq "python.exe" -and $_.CommandLine -match "Real_Time_Monitor" -and $_.CommandLine -match "--label S1" })
 foreach ($proc in $procs) {
     (Get-WmiObject Win32_Process -Filter "ProcessId='$($proc.ProcessId)'").Terminate() | Out-Null
 }
