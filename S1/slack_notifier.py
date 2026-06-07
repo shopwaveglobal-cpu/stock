@@ -317,18 +317,100 @@ def send_slack_realtime_alert(alert_type: str, stock_name: str, ticker: str,
         return False
 
 
+# ── 표 포맷 헬퍼 ─────────────────────────────────────────────────────
+def _kor_width(s: str) -> int:
+    """표시 너비 계산 (한글/CJK = 2, 나머지 = 1)"""
+    w = 0
+    for c in s:
+        cp = ord(c)
+        if (0x1100 <= cp <= 0x11FF or 0x2E80 <= cp <= 0x303E or
+                0x3040 <= cp <= 0x33FF or 0xAC00 <= cp <= 0xD7FF or
+                0xF900 <= cp <= 0xFAFF or 0xFE30 <= cp <= 0xFE4F or
+                0xFF01 <= cp <= 0xFF60 or 0xFFE0 <= cp <= 0xFFE6):
+            w += 2
+        else:
+            w += 1
+    return w
+
+
+def _rpad(s: str, w: int) -> str:
+    """오른쪽 공백 채우기 (한글 너비 보정)"""
+    return s + ' ' * max(0, w - _kor_width(s))
+
+
+def _lpad(s: str, w: int) -> str:
+    """왼쪽 공백 채우기 — 오른쪽 정렬 (숫자용)"""
+    return ' ' * max(0, w - _kor_width(s)) + s
+
+
+def _fp(p) -> str:
+    """가격 포맷 (천 단위 콤마)"""
+    try:
+        return f"{int(p):,}" if p else "-"
+    except (TypeError, ValueError):
+        return "-"
+
+
+def _build_table(rows: list,
+                 h1: str, h2: str, h3: str, h4: str = "",
+                 w1: int = 20, w2: int = 9, w3: int = 10, w4: int = 0) -> str:
+    """
+    Slack code-block 용 monospace 표 생성.
+    h4/w4 를 지정하면 4열, 아니면 3열.
+    """
+    use4 = bool(h4 and w4)
+    sep_len = w1 + 2 + w2 + 2 + w3 + (2 + w4 if use4 else 0)
+    sep = '─' * sep_len
+
+    def row_line(n, c, b, d=""):
+        base = _rpad(n, w1) + '  ' + _lpad(c, w2) + '  ' + _lpad(b, w3)
+        if use4:
+            base += '  ' + _lpad(d, w4)
+        return base
+
+    lines = [row_line(h1, h2, h3, h4), sep]
+    for r in rows:
+        name  = str(r.get('name', ''))
+        close = _fp(r.get('close'))
+        buy   = _fp(r.get('buy'))
+        extra = r.get('extra', '')
+        lines.append(row_line(name, close, buy, extra))
+    return '\n'.join(lines)
+
+
+def _section_blocks(title: str, rows: list,
+                    h1: str, h2: str, h3: str, h4: str = "",
+                    w1: int = 20, w2: int = 9, w3: int = 10, w4: int = 0) -> list:
+    """섹션 제목 + 표(code block) + divider 블록 목록 반환"""
+    blocks = []
+    blocks.append({
+        "type": "section",
+        "text": {"type": "mrkdwn",
+                 "text": f"*{title}*"}
+    })
+    if rows:
+        tbl = _build_table(rows, h1, h2, h3, h4, w1, w2, w3, w4)
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"```{tbl}```"}
+        })
+    else:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "없음"}
+        })
+    blocks.append({"type": "divider"})
+    return blocks
+
+
+# ─────────────────────────────────────────────────────────────────────
 def send_slack_daily_report(results: List[dict], total_stocks: int,
                             system_label: str = "S12") -> bool:
     """
-    일일 리포트를 Slack으로 전송 (Block Kit 형식) — 표 형식 4섹션
+    일일 리포트를 Slack으로 전송 (Block Kit — monospace 표 형식, 4섹션)
 
-    Args:
-        results:      전체 종목 분석 결과 리스트 (alerts 아님)
-        total_stocks: 총 종목 수
-        system_label: 시스템 라벨 (S1/S12)
-
-    Returns:
-        bool: 전송 성공 여부
+    Columns (20:00 기준):  종목명 | 종가 | 익일매수가
+    Sections: 🎯 매수완료 / 🔴 1% 인접 / 🟠 3% 인접 / 🟡 5% 인접
     """
     from datetime import datetime
 
@@ -365,34 +447,17 @@ def send_slack_daily_report(results: List[dict], total_stocks: int,
 
             if next_buy and next_buy > 0 and close > 0:
                 dist = (close - next_buy) / next_buy * 100
-                row = {"name": name, "close": close, "buy": next_buy, "dist": dist}
+                row = {"name": name, "close": close, "buy": next_buy}
                 if   0 < dist <= 1: 인접_1.append(row)
                 elif 1 < dist <= 3: 인접_3.append(row)
                 elif 3 < dist <= 5: 인접_5.append(row)
 
         for lst in (인접_1, 인접_3, 인접_5):
-            lst.sort(key=lambda x: x["dist"])
-
-        # ── 헬퍼 ──────────────────────────────────────────────────────
-        def fp(p) -> str:
-            try:
-                return f"{int(p):,}" if p else "-"
-            except (TypeError, ValueError):
-                return "-"
-
-        def rows_to_mrkdwn(rows: list) -> str:
-            if not rows:
-                return "없음"
-            lines = []
-            for row in rows:
-                dist_tag = f"  _(+{row['dist']:.1f}%)_" if "dist" in row else ""
-                lines.append(f"• *{row['name']}*  {fp(row['close'])} → {fp(row['buy'])}{dist_tag}")
-            return "\n".join(lines)
+            lst.sort(key=lambda x: (x["close"] - x["buy"]) / x["buy"] * 100)
 
         # ── Block Kit 조립 ────────────────────────────────────────────
         blocks: list = []
 
-        # 헤더
         blocks.append({
             "type": "header",
             "text": {"type": "plain_text",
@@ -405,28 +470,18 @@ def send_slack_daily_report(results: List[dict], total_stocks: int,
         })
         blocks.append({"type": "divider"})
 
-        # 4개 섹션
-        sections = [
-            ("🎯 매수 완료",  체결_rows),
-            ("🔴 1% 인접",   인접_1),
-            ("🟠 3% 인접",   인접_3),
-            ("🟡 5% 인접",   인접_5),
-        ]
-        for title, rows in sections:
-            count = len(rows)
-            # 섹션 헤더
-            blocks.append({
-                "type": "section",
-                "text": {"type": "mrkdwn",
-                         "text": f"*{title} ({count}건)*"}
-            })
-            # 종목 목록
-            body = rows_to_mrkdwn(rows)
-            blocks.append({
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": body}
-            })
-            blocks.append({"type": "divider"})
+        # 4섹션 — 표 컬럼: 종목명 | 종가 | 익일매수가
+        for title, rows in (
+            (f"🎯 매수 완료 ({len(체결_rows)}건)", 체결_rows),
+            (f"🔴 1% 인접 ({len(인접_1)}건)",    인접_1),
+            (f"🟠 3% 인접 ({len(인접_3)}건)",    인접_3),
+            (f"🟡 5% 인접 ({len(인접_5)}건)",    인접_5),
+        ):
+            blocks.extend(_section_blocks(
+                title, rows,
+                "종목명", "종가", "익일매수가",
+                w1=20, w2=9, w3=10
+            ))
 
         # ── 전송 (50블록 제한 분할) ──────────────────────────────────
         fallback_text = f"📊 [{system_label}] 일일 리포트 - {now}"

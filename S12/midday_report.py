@@ -21,8 +21,7 @@ from dotenv import load_dotenv
 # 거래일 체크
 from trading_day_utils import is_trading_day
 
-# 알람 전송
-from telegram_notifier import send_telegram_message
+# 알람 전송 (Slack 전용)
 from slack_notifier import send_slack_message
 
 load_dotenv()
@@ -199,30 +198,28 @@ def build_midday_rows(signal_file: str, token: str) -> List[Dict]:
 
 
 # ── 메시지 전송 ───────────────────────────────────────────────────
-def send_midday_telegram(rows: List[Dict], system_label: str, total_stocks: int):
-    now = datetime.now().strftime("%H:%M")
-
-    msg  = f"🔍 <b>[{system_label}] 11:30 중간 점검</b>\n"
-    msg += f"🕐 {now}  총 {total_stocks}종목\n"
-    msg += "─────────────────────\n\n"
-
-    if not rows:
-        msg += "✅ 5% 이내 인접 종목 없음\n"
-    else:
-        msg += f"5% 이내 인접 <b>{len(rows)}종목</b>\n\n"
-        for r in rows:
-            low_s  = f"{int(r['저가']):,}"
-            buy_s  = f"{int(r['매수가']):,}"
-            dist_s = f"{r['이격도']:.1f}%"
-            label  = f"{r['종목명']}({r['차수']})"
-            msg += f"• {label}  저가 {low_s} → {buy_s}  <i>({dist_s})</i>\n"
-
-    send_telegram_message(msg, recipients=["all"])
-    logger.info(f"✓ [{system_label}] 텔레그램 중간 점검 전송 완료")
-
-
 def send_midday_slack(rows: List[Dict], system_label: str, total_stocks: int):
+    """
+    11:30 중간 점검 Slack 전송 — monospace 표 형식
+    Columns: 종목명 | 저가 | 당일매수가 | 이격도
+    """
+    from slack_notifier import send_slack_message, _kor_width, _rpad, _lpad
+
     now = datetime.now().strftime("%H:%M")
+
+    def _build_midday_table(data_rows):
+        W1, W2, W3, W4 = 18, 9, 10, 6   # 종목명 | 저가 | 당일매수가 | 이격도
+        sep = '─' * (W1 + 2 + W2 + 2 + W3 + 2 + W4)
+        header = (_rpad("종목명", W1) + '  ' + _lpad("저가", W2) + '  ' +
+                  _lpad("당일매수가", W3) + '  ' + _lpad("이격도", W4))
+        lines = [header, sep]
+        for r in data_rows:
+            name  = _rpad(f"{r['종목명']}({r['차수']})", W1)
+            low   = _lpad(f"{int(r['저가']):,}", W2)
+            buy   = _lpad(f"{int(r['매수가']):,}", W3)
+            dist  = _lpad(f"{r['이격도']:.1f}%", W4)
+            lines.append(name + '  ' + low + '  ' + buy + '  ' + dist)
+        return '\n'.join(lines)
 
     blocks = []
     blocks.append({
@@ -238,18 +235,22 @@ def send_midday_slack(rows: List[Dict], system_label: str, total_stocks: int):
     blocks.append({"type": "divider"})
 
     if not rows:
-        body = "✅ 5% 이내 인접 종목 없음"
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "✅ 5% 이내 인접 종목 없음"}
+        })
     else:
-        lines = [f"*5% 이내 인접 {len(rows)}종목*"]
-        for r in rows:
-            low_s  = f"{int(r['저가']):,}"
-            buy_s  = f"{int(r['매수가']):,}"
-            dist_s = f"{r['이격도']:.1f}%"
-            label  = f"{r['종목명']}({r['차수']})"
-            lines.append(f"• *{label}*  저가 {low_s} → {buy_s}  _({dist_s})_")
-        body = "\n".join(lines)
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn",
+                     "text": f"*5% 이내 인접 {len(rows)}종목*"}
+        })
+        tbl = _build_midday_table(rows)
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"```{tbl}```"}
+        })
 
-    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": body}})
     blocks.append({"type": "divider"})
 
     fallback = f"🔍 [{system_label}] 11:30 중간 점검 - {now}"
@@ -315,12 +316,7 @@ def main():
     rows = build_midday_rows(signal_file, token)
     logger.info(f"\n중간 점검 결과: {len(rows)}종목 (5% 이내)")
 
-    # 전송
-    try:
-        send_midday_telegram(rows, system_label, total_stocks)
-    except Exception as e:
-        logger.error(f"텔레그램 전송 실패: {e}")
-
+    # 전송 (Slack 전용)
     try:
         send_midday_slack(rows, system_label, total_stocks)
     except Exception as e:
