@@ -117,12 +117,12 @@ class CryptoRealtimeMonitor:
             if cutoff_price is not None and target_price > cutoff_price:
                 return (False, False)  # 금지 레벨
 
-            # 6. RESTART 추적
+            # 6. RESTART 추적 (없으면 첫 행 날짜를 기준점으로 사용)
             restart_events = df[df['event'].str.contains('RESTART', na=False)]
             if len(restart_events) == 0:
-                return (False, False)
-
-            last_restart_date = restart_events.iloc[-1]['date']
+                last_restart_date = str(df.iloc[0]['date']) if len(df) > 0 else "0000-00-00"
+            else:
+                last_restart_date = restart_events.iloc[-1]['date']
 
             # 7. alert_history 초기화
             if symbol not in self.alert_history:
@@ -144,7 +144,10 @@ class CryptoRealtimeMonitor:
                 return (False, False)  # 이미 알람 보냄
 
             # 9. 첫 자리 판단 (마커용)
-            after_restart = df.loc[restart_events.index[-1] + 1:]
+            if len(restart_events) > 0:
+                after_restart = df.loc[restart_events.index[-1] + 1:]
+            else:
+                after_restart = df  # RESTART 없으면 전체 파일 기준
             sell_events = after_restart[after_restart['event'].str.contains('SELL', na=False)]
             is_first = (len(sell_events) == 0)
 
@@ -346,6 +349,8 @@ class CryptoRealtimeMonitor:
             return {
                 'symbol': symbol,
                 'target': next_target,
+                'next_target': next_target,
+                'buy_levels': buy_levels,
                 'target_price': target_price,
                 'candle_low': candle_low,
                 'rank': coin_data['rank'],
@@ -357,7 +362,8 @@ class CryptoRealtimeMonitor:
     
     def calculate_average_buy_and_sell_price(self, coin_data: Dict) -> Dict:
         """평균 매수선과 매도가 계산"""
-        next_target = coin_data['next_target']  # 예: "B3"
+        # execution_data는 'target', coin_data는 'next_target' 키 사용 → 둘 다 처리
+        next_target = coin_data.get('next_target') or coin_data.get('target')  # 예: "B3"
         buy_levels = coin_data['buy_levels']
         
         # 매수 단계 추출 (B3 → 3)
@@ -497,25 +503,16 @@ class CryptoRealtimeMonitor:
                 f"<tg-spoiler>* 기준 고점: ${h_value_str}</tg-spoiler>"
             )
 
-            # 텔레그램 전송 (모든 수신자에게)
-            telegram_success = send_telegram_message(message, recipients=["all"])
-
-            # Slack 전송 (선택적)
-            slack_success = True
+            # Slack 전송
+            slack_success = False
             if send_slack_alert:
-                # alert에 is_first 정보 추가 (슬랙 메시지에서 사용)
                 alert_with_first = alert.copy()
                 alert_with_first['is_first'] = is_first
                 slack_success = send_slack_alert(alert_with_first)
 
-            if telegram_success or slack_success:
-                status = []
-                if telegram_success:
-                    status.append("텔레그램")
-                if slack_success:
-                    status.append("Slack")
+            if slack_success:
                 first_marker = " (첫 자리)" if is_first else ""
-                print(f"알람 전송 성공: {alert['symbol']} {alert['target']}{first_marker} ({', '.join(status)})")
+                print(f"알람 전송 성공: {alert['symbol']} {alert['target']}{first_marker} (Slack)")
             else:
                 print(f"알람 전송 실패: {alert['symbol']} {alert['target']}")
 
@@ -555,38 +552,28 @@ class CryptoRealtimeMonitor:
                 f"<tg-spoiler>* 기준 고점: ${h_value_str}</tg-spoiler>"
             )
             
-            # 텔레그램 전송 (모든 수신자에게)
-            telegram_success = send_telegram_message(message, recipients=["all"])
-            
-            # Slack 전송 (선택적)
-            slack_success = True
+            # Slack 전송
+            slack_success = False
             if send_slack_buy_execution_alert:
                 slack_success = send_slack_buy_execution_alert(execution_data, price_data, current_price)
-            
-            if telegram_success or slack_success:
+
+            if slack_success:
                 # 매수 실행 이력 업데이트
                 today = datetime.now().strftime("%Y-%m-%d")
                 symbol = execution_data['symbol']
                 target = execution_data['target']
-                
+
                 if symbol not in self.alert_history:
                     self.alert_history[symbol] = {}
                 if not isinstance(self.alert_history[symbol], dict):
                     self.alert_history[symbol] = {}
-                
-                # 매수 실행 이력 키 (접근 알림과 구분)
+
                 execution_key = f"{target}_EXECUTED"
                 self.alert_history[symbol][execution_key] = today
                 self.save_alert_history()
-                
-                status = []
-                if telegram_success:
-                    status.append("텔레그램")
-                if slack_success:
-                    status.append("Slack")
-                print(f"매수 실행 알림 전송 완료: {symbol} {target} ({', '.join(status)})")
+                print(f"매수 실행 알림 전송 완료: {symbol} {target} (Slack)")
             else:
-                print(f"매수 실행 알림 전송 실패: {symbol} {target}")
+                print(f"매수 실행 알림 전송 실패: {execution_data['symbol']} {execution_data['target']}")
                 
         except Exception as e:
             print(f"매수 실행 알림 전송 실패: {e}")

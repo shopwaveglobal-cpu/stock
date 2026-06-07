@@ -67,7 +67,7 @@ if (-not $omgPython) {
         $stderrLog = "C:\Users\log\Desktop\Code\omg\logs\monitor_${ts}_err.log"
         Write-Log "OMG 재시작 ($($recentRestarts.Count)회/1h)"
         Start-Process -FilePath "C:\Python314\python.exe" `
-                      -ArgumentList "crypto_realtime_monitor.py" `
+                      -ArgumentList "-u", "crypto_realtime_monitor.py" `
                       -WorkingDirectory "C:\Users\log\Desktop\Code\omg" `
                       -WindowStyle Hidden `
                       -RedirectStandardOutput $stdoutLog `
