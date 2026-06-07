@@ -177,9 +177,24 @@ Manual review artifacts:
 - Event logs for selected stocks.
 - Per-stock debug CSV for difficult cases.
 
+## Pre-Deployment Review Loop
+
+The system should not be treated as deployment-ready after the first implementation pass. Before full deployment, it must go through repeated data and backtest review with the user.
+
+The review loop is:
+
+1. Run the scanner and backtest over the full available history from 2020-01-01 onward.
+2. Select representative stocks, including COVID-crash names, strong rebound names, failed rebound names, and ambiguous edge cases.
+3. Review per-stock event logs with the user.
+4. Check whether each Taesan event matches the intended interpretation of the strategy.
+5. Fix rule interpretation, state transitions, filters, or alert wording when the simulation disagrees with the intended behavior.
+6. Re-run the same cases after each rule change.
+7. Promote to deployment only after the scanner produces stable and explainable results across repeated review passes.
+
+Each review pass should preserve its output under `output/reviews/` with a timestamp so results can be compared across rule changes.
+
 ## Open Implementation Notes
 
 - Historical data depth must be enough to cover 2020 onward. If Kiwoom limits daily candle history per call, pagination or cached incremental history will be required.
 - Financial filters are intentionally delayed. The first release should leave a filter interface where revenue, operating profit, and net income rules can be added.
 - Public scanner results are strategy-simulated state, not the user's actual filled position. Alerts must use wording such as "virtual strategy state" where relevant.
-
