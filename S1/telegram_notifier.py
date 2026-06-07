@@ -2,14 +2,10 @@
 텔레그램 알람 전송 모듈
 """
 import os
-import sys
 import requests
 import logging
 from typing import List, Optional
 from dotenv import load_dotenv
-
-# S1 폴더의 slack_notifier는 Real_Time_Monitor.py에서 직접 import하여 사용
-# telegram_notifier.py에서는 텔레그램 전송만 담당
 
 # 환경 변수 로드
 load_dotenv()
@@ -86,187 +82,96 @@ def send_telegram_message(message: str, recipients: List[str] = None, parse_mode
     return success
 
 
-def send_daily_report(alerts: List[dict], total_stocks: int, recipients: List[str] = None, system_label: str = "S1"):
+def send_daily_report(results: List[dict], total_stocks: int, recipients: List[str] = None,
+                      system_label: str = "S12"):
     """
-    일일 리포트 전송 (20:10 실행 시)
-    
+    일일 리포트 전송 (20:10 실행 시) — 표 형식 4섹션
+
     Args:
-        alerts: 알람 대상 종목 리스트
+        results:      전체 종목 분석 결과 리스트 (alerts 아님)
         total_stocks: 총 종목 수
-        recipients: 수신자 리스트
+        recipients:   수신자 리스트
+        system_label: 시스템 라벨 (S1/S12)
     """
     from datetime import datetime
-    
-    # 헤더
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    message = f"📊 <b>[{system_label}] 일일 트레이딩 리포트</b>\n"
-    message += f"🕐 {now}\n"
-    message += f"───────────────\n\n"
-    
-    if not alerts:
-        message += f"✅ 총 {total_stocks}개 종목 분석\n"
-        message += f"🔕 알람 대상 없음\n"
-        send_telegram_message(message, recipients)
-        return
-    
-    # 상태별 그룹화
-    ready_buy1 = []
-    ready_buy2 = []
-    ready_buy3 = []
-    bought_stocks = []
-    ready_sell = []
-    
-    for alert in alerts:
-        status = alert.get("알람상태", "")
-        if "READY_BUY1" in status:
-            ready_buy1.append(alert)
-        elif "READY_BUY2" in status:
-            ready_buy2.append(alert)
-        elif "READY_BUY3" in status:
-            ready_buy3.append(alert)
-        elif "BOUGHT" in alert.get("매수상태", ""):
-            bought_stocks.append(alert)
-        elif "READY_SELL" in status:
-            ready_sell.append(alert)
-    
-    # 1차 매수 접근 중 (10% 이내) - 이격도 낮은 순으로 정렬
-    if ready_buy1:
-        message += f"🟡 <b>1차 매수 접근 중</b> ({len(ready_buy1)}개)\n"
-        
-        # 이격도 낮은 순으로 정렬
-        ready_buy1.sort(key=lambda x: x.get("1차매수선이격도(%)", 999))
-        
-        for stock in ready_buy1:
-            name = stock.get("종목명", "")
-            close = stock.get("종가", 0)
-            buy1 = stock.get("1차매수선(익일)", 0)
-            dist = stock.get("1차매수선이격도(%)", 0)
-            
-            message += f"  • {name}\n"
-            message += f"    현재가: {int(close):,}원\n"
-            message += f"    매수가: {int(round(buy1)) if buy1 else 0:,}원\n"
-            message += f"    이격도: {dist:.1f}%\n\n"
-        
-        message += "\n"
-    
-    # 2차 매수 접근 중 (10% 이내) - 이격도 낮은 순으로 정렬
-    if ready_buy2:
-        message += f"🟠 <b>2차 매수 접근 중</b> ({len(ready_buy2)}개)\n"
-        
-        # 이격도 낮은 순으로 정렬
-        ready_buy2.sort(key=lambda x: x.get("2차매수선이격도(%)", 999))
-        
-        for stock in ready_buy2:
-            name = stock.get("종목명", "")
-            close = stock.get("종가", 0)
-            buy2 = stock.get("2차매수선(익일)", 0)
-            dist = stock.get("2차매수선이격도(%)", 0)
-            
-            message += f"  • {name}\n"
-            message += f"    현재가: {int(close):,}원\n"
-            message += f"    매수가: {int(round(buy2)) if buy2 else 0:,}원\n"
-            message += f"    이격도: {dist:.1f}%\n\n"
-        
-        message += "\n"
-    
-    # 3차 매수 접근 중 (10% 이내) - 이격도 낮은 순으로 정렬
-    if ready_buy3:
-        message += f"🟤 <b>3차 매수 접근 중</b> ({len(ready_buy3)}개)\n"
-        
-        # 이격도 낮은 순으로 정렬
-        ready_buy3.sort(key=lambda x: x.get("3차매수선이격도(%)", 999))
-        
-        for stock in ready_buy3:
-            name = stock.get("종목명", "")
-            close = stock.get("종가", 0)
-            buy3 = stock.get("3차매수선(익일)", 0)
-            dist = stock.get("3차매수선이격도(%)", 0)
-            
-            message += f"  • {name}\n"
-            message += f"    현재가: {int(close):,}원\n"
-            message += f"    매수가: {int(round(buy3)) if buy3 else 0:,}원\n"
-            message += f"    이격도: {dist:.1f}%\n\n"
-        
-        message += "\n"
-    
-    # 매수 완료 종목 - 수익률 높은 순으로 정렬
-    if bought_stocks:
-        message += f"🔴 <b>매수 완료 종목</b> ({len(bought_stocks)}개)\n"
-        
-        # 수익률 높은 순으로 정렬
-        bought_stocks.sort(key=lambda x: ((x.get("종가", 0) - x.get("평균매수가", 0)) / x.get("평균매수가", 1)) * 100 if x.get("평균매수가", 0) else -999, reverse=True)
-        
-        for stock in bought_stocks:
-            name = stock.get("종목명", "")
-            close = stock.get("종가", 0)
-            avg_price = stock.get("평균매수가", 0)
-            
-            message += f"  • {name}\n"
-            message += f"    현재가: {int(close):,}원\n"
-            
-            if avg_price and close:
-                dist = ((close - avg_price) / avg_price) * 100
-                message += f"    평균가: {int(round(avg_price)) if avg_price else 0:,}원\n"
-                message += f"    이격도: {dist:+.1f}%\n\n"
-            else:
-                message += f"    평균가: -\n"
-                message += f"    이격도: -\n\n"
-        
-        message += "\n"
-    
-    # 매도선 접근 - 이격도 낮은 순으로 정렬
-    if ready_sell:
-        message += f"🟢 <b>매도선 접근</b> ({len(ready_sell)}개)\n"
-        
-        # 이격도 낮은 순으로 정렬
-        ready_sell.sort(key=lambda x: min(
-            abs(x.get("1차매도선이격도(%)", 999)),
-            abs(x.get("2차매도선이격도(%)", 999)),
-            abs(x.get("3차매도선이격도(%)", 999))
-        ))
-        
-        for stock in ready_sell:
-            name = stock.get("종목명", "")
-            close = stock.get("종가", 0)
-            msg = stock.get("상태메시지", "")
-            
-            # 매도선 찾기
-            if "+3%" in msg:
-                target = stock.get("1차매도선(+3%)", 0)
-                dist = stock.get("1차매도선이격도(%)", 0)
-            elif "+5%" in msg:
-                target = stock.get("2차매도선(+5%)", 0)
-                dist = stock.get("2차매도선이격도(%)", 0)
-            elif "+7%" in msg:
-                target = stock.get("3차매도선(+7%)", 0)
-                dist = stock.get("3차매도선이격도(%)", 0)
-            else:
-                target = 0
-                dist = 0
-            
-            message += f"  • {name}\n"
-            message += f"    현재가: {int(close):,}원\n"
-            message += f"    목표가: {int(round(target)) if target else 0:,}원\n"
-            message += f"    이격도: {dist:+.1f}%\n\n"
-        
-        message += "\n"
-    
-    # 텔레그램 메시지 전송
-    telegram_success = send_telegram_message(message, recipients)
-    
-    # Slack 메시지 전송은 Trading_Signal_System_S1.py에서 직접 호출하므로 여기서는 생략
-    # (이미 Trading_Signal_System_S1.py에서 send_slack_daily_report을 호출하고 있음)
-    
-    return telegram_success
+
+    # ── 데이터 분류 ──────────────────────────────────────────────────
+    체결_rows: List[dict] = []   # 매수 완료 행 (차수별 1행씩)
+    인접_1:   List[dict] = []   # 종가 기준 1% 이내
+    인접_3:   List[dict] = []   # 1~3%
+    인접_5:   List[dict] = []   # 3~5%
+
+    for r in (results or []):
+        status   = r.get("매수상태", "NONE") or "NONE"
+        close    = r.get("종가", 0) or 0
+        name     = r.get("종목명", "")
+        buy1_nxt = r.get("1차매수선(익일)") or 0
+        buy2_nxt = r.get("2차매수선(익일)") or 0
+        buy3_nxt = r.get("3차매수선(익일)") or 0
+
+        # ── 체결 섹션: 완료된 차수별 1행씩 ──
+        # '내일의 매수가' = 해당 차수의 익일 매수선 (현재 재계산값)
+        if status in ("BOUGHT_1", "BOUGHT_2", "BOUGHT_3"):
+            체결_rows.append({"name": f"{name}(1차)", "close": close, "buy": buy1_nxt})
+        if status in ("BOUGHT_2", "BOUGHT_3"):
+            체결_rows.append({"name": f"{name}(2차)", "close": close, "buy": buy2_nxt})
+        if status == "BOUGHT_3":
+            체결_rows.append({"name": f"{name}(3차)", "close": close, "buy": buy3_nxt})
+
+        # ── 인접 섹션: 다음 미체결 매수선 기준 ──
+        if   status == "NONE":     next_buy = buy1_nxt
+        elif status == "BOUGHT_1": next_buy = buy2_nxt
+        elif status == "BOUGHT_2": next_buy = buy3_nxt
+        else:                      next_buy = 0   # BOUGHT_3 이상 — 더 살 것 없음
+
+        if next_buy and next_buy > 0 and close > 0:
+            dist = (close - next_buy) / next_buy * 100
+            row = {"name": name, "close": close, "buy": next_buy, "dist": dist}
+            if   0 < dist <= 1: 인접_1.append(row)
+            elif 1 < dist <= 3: 인접_3.append(row)
+            elif 3 < dist <= 5: 인접_5.append(row)
+
+    # 인접 섹션: 이격도 오름차순 (가장 가까운 종목이 위)
+    for lst in (인접_1, 인접_3, 인접_5):
+        lst.sort(key=lambda x: x["dist"])
+
+    # ── 메시지 조립 ──────────────────────────────────────────────────
+    def fp(p) -> str:
+        """가격 포맷"""
+        try:
+            return f"{int(p):,}" if p else "-"
+        except (TypeError, ValueError):
+            return "-"
+
+    def fmt_section(rows: list, title: str) -> str:
+        if not rows:
+            return f"{title} (0건)\n없음\n\n"
+        lines = f"{title} ({len(rows)}건)\n"
+        for row in rows:
+            dist_tag = f"  <i>+{row['dist']:.1f}%</i>" if "dist" in row else ""
+            lines += f"• {row['name']}  {fp(row['close'])} → {fp(row['buy'])}{dist_tag}\n"
+        return lines + "\n"
+
+    msg  = f"📊 <b>[{system_label}] 일일 리포트</b>\n"
+    msg += f"🕐 {now}  총 {total_stocks}종목\n"
+    msg += "─────────────────────\n\n"
+    msg += fmt_section(체결_rows, "🎯 매수 완료")
+    msg += fmt_section(인접_1,   "🔴 1% 인접")
+    msg += fmt_section(인접_3,   "🟠 3% 인접")
+    msg += fmt_section(인접_5,   "🟡 5% 인접")
+
+    send_telegram_message(msg, recipients)
 
 
 def send_realtime_alert(alert_type: str, stock_name: str, ticker: str, 
                        current_price: float, target_price: float, 
                        distance_pct: float, recipients: List[str] = None,
-                       sell_prices: dict = None, system_label: str = "S1",
+                       sell_prices: dict = None, system_label: str = "S2",
                        low_price: float = None):
     """
-    실시간 알람 전송 (텔레그램)
+    실시간 알람 전송 (텔레그램 + Slack)
     
     Args:
         alert_type: "1차 매수선 5% 인접", "2차 매수선 5% 인접", "1차 매수 체결" 등
@@ -277,7 +182,7 @@ def send_realtime_alert(alert_type: str, stock_name: str, ticker: str,
         distance_pct: 이격도 (%)
         recipients: 수신자 리스트
         sell_prices: 매도가 정보 {"sell1": 가격, "sell2": 가격, "sell3": 가격}
-        system_label: 시스템 라벨 (기본값: "S1")
+        system_label: 시스템 라벨 (기본값: "S2")
         low_price: 저가 (선택적)
     """
     from datetime import datetime
@@ -363,7 +268,7 @@ def send_error_alert(error_message: str, script_name: str = None, recipients: Li
         if "S1" in script_name or "s1" in script_name:
             system_label = "S1"
         elif "S12" in script_name or "s12" in script_name:
-            system_label = "S12"  # S12 시스템일 경우만
+            system_label = "S12"
         elif "omg" in script_name or "OMG" in script_name or "crypto" in script_name:
             system_label = "OMG"
 
@@ -393,6 +298,52 @@ def send_error_alert(error_message: str, script_name: str = None, recipients: Li
         pass
 
 
+# upbit1515 호환성을 위한 TelegramNotifier 클래스
+class TelegramNotifier:
+    """텔레그램 알림 시스템 (upbit1515 호환)"""
+    
+    def __init__(self, bot_token: str = None):
+        """텔레그램 알림 초기화"""
+        self.bot_token = bot_token or TELEGRAM_TOKEN
+        if self.bot_token:
+            self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
+        else:
+            self.base_url = None
+        self.logger = logging.getLogger(__name__)
+    
+    def send_message(self, chat_id: str, message: str) -> bool:
+        """텔레그램 메시지 전송"""
+        if not self.bot_token:
+            self.logger.error("텔레그램 토큰이 설정되지 않았습니다.")
+            return False
+        
+        try:
+            url = f"{self.base_url}/sendMessage"
+            data = {
+                'chat_id': chat_id,
+                'text': message,
+                'parse_mode': 'HTML'
+            }
+            
+            response = requests.post(url, data=data, timeout=10)
+            response.raise_for_status()
+            
+            self.logger.info("텔레그램 메시지 전송 성공")
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"텔레그램 메시지 전송 실패: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"텔레그램 메시지 전송 중 오류: {e}")
+            return False
+    
+    def test_connection(self, chat_id: str) -> bool:
+        """텔레그램 연결 테스트"""
+        test_message = "🤖 업비트 모니터링 봇 연결 테스트\n\n✅ 정상적으로 연결되었습니다!"
+        return self.send_message(chat_id, test_message)
+
+
 # 테스트용
 if __name__ == "__main__":
     # 간단한 테스트 메시지
@@ -401,4 +352,3 @@ if __name__ == "__main__":
     # 본인에게만 테스트
     print("본인에게 테스트 메시지 전송 중...")
     send_telegram_message(test_msg, recipients=["me"])
-

@@ -1,5 +1,5 @@
 """
-Slack 알람 전송 모듈 (S1 시스템용)
+Slack 알람 전송 모듈 (S12 시스템용)
 """
 import os
 import requests
@@ -105,7 +105,7 @@ def send_slack_realtime_alert_block_kit(
     target_price: float,
     distance_pct: float,
     sell_prices: dict = None,
-    system_label: str = "S1",
+    system_label: str = "S2",
     low_price: float = None
 ) -> bool:
     """
@@ -119,7 +119,7 @@ def send_slack_realtime_alert_block_kit(
         target_price: 목표가 (매수선 또는 매도선)
         distance_pct: 이격도 (%)
         sell_prices: 매도가 정보 {"sell1": 가격, "sell2": 가격, "sell3": 가격}
-        system_label: 시스템 라벨 (기본값: "S1")
+        system_label: 시스템 라벨 (기본값: "S2")
         low_price: 저가 (선택적)
     
     Returns:
@@ -190,7 +190,7 @@ def send_slack_realtime_alert_block_kit(
 
             # Divider
             blocks.append({"type": "divider"})
-        
+
         # 매수 체결 알람인 경우
         else:
             # Section 블록을 첫 번째로: iOS 알람 미리보기가 이 텍스트를 사용
@@ -201,7 +201,7 @@ def send_slack_realtime_alert_block_kit(
                     "text": f"*{emoji} {alert_type} — {stock_name}*"
                 }
             })
-
+            
             # section 블록 2: 본문 (rich_text 제거)
             low_line = f"\n저가:        {int(low_price):,}원" if low_price else ""
             body_text = (
@@ -212,6 +212,7 @@ def send_slack_realtime_alert_block_kit(
                 f"이격도:    {distance_pct:+.2f}%"
             )
 
+            # 매도가 정보 추가 (매수 체결 시)
             if sell_prices:
                 if sell_prices.get('sell1'):
                     body_text += f"\n3% 매도가: {int(round(sell_prices['sell1'])):,}원"
@@ -316,363 +317,144 @@ def send_slack_realtime_alert(alert_type: str, stock_name: str, ticker: str,
         return False
 
 
-def send_slack_daily_report(alerts: List[dict], total_stocks: int, system_label: str = "S1") -> bool:
+def send_slack_daily_report(results: List[dict], total_stocks: int,
+                            system_label: str = "S12") -> bool:
     """
-    일일 리포트를 Slack으로 전송 (Block Kit 형식)
-    
+    일일 리포트를 Slack으로 전송 (Block Kit 형식) — 표 형식 4섹션
+
     Args:
-        alerts: 알람 대상 종목 리스트
+        results:      전체 종목 분석 결과 리스트 (alerts 아님)
         total_stocks: 총 종목 수
-        system_label: 시스템 라벨 (기본값: "S1", 사용 안 함)
-    
+        system_label: 시스템 라벨 (S1/S12)
+
     Returns:
         bool: 전송 성공 여부
     """
     from datetime import datetime
-    
+
     try:
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        
-        # Block Kit blocks 생성
-        blocks = []
-        
-        # Header
+
+        # ── 데이터 분류 ────────────────────────────────────────────────
+        체결_rows: List[dict] = []
+        인접_1:   List[dict] = []
+        인접_3:   List[dict] = []
+        인접_5:   List[dict] = []
+
+        for r in (results or []):
+            status   = r.get("매수상태", "NONE") or "NONE"
+            close    = r.get("종가", 0) or 0
+            name     = r.get("종목명", "")
+            buy1_nxt = r.get("1차매수선(익일)") or 0
+            buy2_nxt = r.get("2차매수선(익일)") or 0
+            buy3_nxt = r.get("3차매수선(익일)") or 0
+
+            # 체결 섹션: 완료된 차수별 1행
+            if status in ("BOUGHT_1", "BOUGHT_2", "BOUGHT_3"):
+                체결_rows.append({"name": f"{name}(1차)", "close": close, "buy": buy1_nxt})
+            if status in ("BOUGHT_2", "BOUGHT_3"):
+                체결_rows.append({"name": f"{name}(2차)", "close": close, "buy": buy2_nxt})
+            if status == "BOUGHT_3":
+                체결_rows.append({"name": f"{name}(3차)", "close": close, "buy": buy3_nxt})
+
+            # 인접 섹션: 다음 미체결 매수선 기준
+            if   status == "NONE":     next_buy = buy1_nxt
+            elif status == "BOUGHT_1": next_buy = buy2_nxt
+            elif status == "BOUGHT_2": next_buy = buy3_nxt
+            else:                      next_buy = 0
+
+            if next_buy and next_buy > 0 and close > 0:
+                dist = (close - next_buy) / next_buy * 100
+                row = {"name": name, "close": close, "buy": next_buy, "dist": dist}
+                if   0 < dist <= 1: 인접_1.append(row)
+                elif 1 < dist <= 3: 인접_3.append(row)
+                elif 3 < dist <= 5: 인접_5.append(row)
+
+        for lst in (인접_1, 인접_3, 인접_5):
+            lst.sort(key=lambda x: x["dist"])
+
+        # ── 헬퍼 ──────────────────────────────────────────────────────
+        def fp(p) -> str:
+            try:
+                return f"{int(p):,}" if p else "-"
+            except (TypeError, ValueError):
+                return "-"
+
+        def rows_to_mrkdwn(rows: list) -> str:
+            if not rows:
+                return "없음"
+            lines = []
+            for row in rows:
+                dist_tag = f"  _(+{row['dist']:.1f}%)_" if "dist" in row else ""
+                lines.append(f"• *{row['name']}*  {fp(row['close'])} → {fp(row['buy'])}{dist_tag}")
+            return "\n".join(lines)
+
+        # ── Block Kit 조립 ────────────────────────────────────────────
+        blocks: list = []
+
+        # 헤더
         blocks.append({
             "type": "header",
-            "text": {
-                "type": "plain_text",
-                "text": "📊 (S1)일일 트레이딩 리포트",
-                "emoji": True
-            }
+            "text": {"type": "plain_text",
+                     "text": f"📊 [{system_label}] 일일 리포트", "emoji": True}
         })
-        
-        # Context (시간)
         blocks.append({
             "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": f"📅 {now}"
-                }
-            ]
+            "elements": [{"type": "mrkdwn",
+                          "text": f"🕐 {now}  총 {total_stocks}종목"}]
         })
-        
-        # Divider
-        blocks.append({
-            "type": "divider"
-        })
-        
-        # 알람 대상 없음
-        if not alerts:
+        blocks.append({"type": "divider"})
+
+        # 4개 섹션
+        sections = [
+            ("🎯 매수 완료",  체결_rows),
+            ("🔴 1% 인접",   인접_1),
+            ("🟠 3% 인접",   인접_3),
+            ("🟡 5% 인접",   인접_5),
+        ]
+        for title, rows in sections:
+            count = len(rows)
+            # 섹션 헤더
             blocks.append({
                 "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"✅ 총 {total_stocks}개 종목 분석\n🔕 알람 대상 없음"
-                }
+                "text": {"type": "mrkdwn",
+                         "text": f"*{title} ({count}건)*"}
             })
+            # 종목 목록
+            body = rows_to_mrkdwn(rows)
             blocks.append({
-                "type": "divider"
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": body}
             })
-            
-            fallback_text = f"📊 일일 트레이딩 리포트 - 총 {total_stocks}개 종목 분석, 알람 대상 없음"
+            blocks.append({"type": "divider"})
+
+        # ── 전송 (50블록 제한 분할) ──────────────────────────────────
+        fallback_text = f"📊 [{system_label}] 일일 리포트 - {now}"
+        MAX_BLOCKS = 50
+
+        if len(blocks) <= MAX_BLOCKS:
             return send_slack_message(fallback_text, parse_html=False, blocks=blocks)
-        
-        # 상태별 그룹화
-        ready_buy1 = []
-        ready_buy2 = []
-        ready_buy3 = []
-        bought_stocks = []
-        ready_sell = []
-        
-        for alert in alerts:
-            status = alert.get("알람상태", "")
-            if "READY_BUY1" in status:
-                ready_buy1.append(alert)
-            elif "READY_BUY2" in status:
-                ready_buy2.append(alert)
-            elif "READY_BUY3" in status:
-                ready_buy3.append(alert)
-            elif "BOUGHT" in alert.get("매수상태", ""):
-                bought_stocks.append(alert)
-            elif "READY_SELL" in status:
-                ready_sell.append(alert)
-        
-        # 1차 매수 접근
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"🟡 *1차 매수 접근 ({len(ready_buy1)}개)*"
-            }
-        })
-        
-        if ready_buy1:
-            ready_buy1.sort(key=lambda x: x.get("1차매수선이격도(%)", 999))
-            for idx, stock in enumerate(ready_buy1):
-                name = stock.get("종목명", "")
-                close = stock.get("종가", 0)
-                buy1 = stock.get("1차매수선(익일)", 0)
-                dist = stock.get("1차매수선이격도(%)", 0)
-                
-                stock_text = f"• *{name}*\n  현재가: {int(close):,}원\n  매수가: {int(round(buy1)) if buy1 else 0:,}원\n  이격도: {dist:.1f}%\n"
-                
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": stock_text
-                    }
-                })
-                
-                # 종목이 여러 개일 때 공백 추가 (마지막 제외)
-                if idx < len(ready_buy1) - 1:
-                    blocks.append({
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "mrkdwn",
-                                "text": "‎ "
-                            }
-                        ]
-                    })
-        else:
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "‎ "
-                }
-            })
-        
-        blocks.append({
-            "type": "divider"
-        })
-        
-        # 2차 매수 접근
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"🟠 *2차 매수 접근 ({len(ready_buy2)}개)*"
-            }
-        })
-        
-        if ready_buy2:
-            ready_buy2.sort(key=lambda x: x.get("2차매수선이격도(%)", 999))
-            for idx, stock in enumerate(ready_buy2):
-                name = stock.get("종목명", "")
-                close = stock.get("종가", 0)
-                buy2 = stock.get("2차매수선(익일)", 0)
-                dist = stock.get("2차매수선이격도(%)", 0)
-                
-                stock_text = f"• *{name}*\n  현재가: {int(close):,}원\n  매수가: {int(round(buy2)) if buy2 else 0:,}원\n  이격도: {dist:.1f}%\n"
-                
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": stock_text
-                    }
-                })
-                
-                if idx < len(ready_buy2) - 1:
-                    blocks.append({
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "mrkdwn",
-                                "text": "‎ "
-                            }
-                        ]
-                    })
-        else:
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "‎ "
-                }
-            })
-        
-        blocks.append({
-            "type": "divider"
-        })
-        
-        # 3차 매수 접근
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"🟤 *3차 매수 접근 ({len(ready_buy3)}개)*"
-            }
-        })
-        
-        if ready_buy3:
-            ready_buy3.sort(key=lambda x: x.get("3차매수선이격도(%)", 999))
-            for idx, stock in enumerate(ready_buy3):
-                name = stock.get("종목명", "")
-                close = stock.get("종가", 0)
-                buy3 = stock.get("3차매수선(익일)", 0)
-                dist = stock.get("3차매수선이격도(%)", 0)
-                
-                stock_text = f"• *{name}*\n  현재가: {int(close):,}원\n  매수가: {int(round(buy3)) if buy3 else 0:,}원\n  이격도: {dist:.1f}%\n"
-                
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": stock_text
-                    }
-                })
-                
-                if idx < len(ready_buy3) - 1:
-                    blocks.append({
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "mrkdwn",
-                                "text": "‎ "
-                            }
-                        ]
-                    })
-        else:
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "‎ "
-                }
-            })
-        
-        blocks.append({
-            "type": "divider"
-        })
-        
-        # 매수 완료 종목
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"🔴 *매수 완료 종목 ({len(bought_stocks)}개)*"
-            }
-        })
-        
-        if bought_stocks:
-            bought_stocks.sort(key=lambda x: ((x.get("종가", 0) - x.get("평균매수가", 0)) / x.get("평균매수가", 1)) * 100 if x.get("평균매수가", 0) else -999, reverse=True)
-            for idx, stock in enumerate(bought_stocks):
-                name = stock.get("종목명", "")
-                close = stock.get("종가", 0)
-                avg_price = stock.get("평균매수가", 0)
-                
-                if avg_price and close:
-                    dist = ((close - avg_price) / avg_price) * 100
-                    stock_text = f"• *{name}*\n  현재가: {int(close):,}원\n  평균가: {int(round(avg_price)) if avg_price else 0:,}원\n  이격도: {dist:+.1f}%\n"
-                else:
-                    stock_text = f"• *{name}*\n  현재가: {int(close):,}원\n"
-                
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": stock_text
-                    }
-                })
-                
-                if idx < len(bought_stocks) - 1:
-                    blocks.append({
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "mrkdwn",
-                                "text": "‎ "
-                            }
-                        ]
-                    })
-        else:
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "‎ "
-                }
-            })
-        
-        blocks.append({
-            "type": "divider"
-        })
-        
-        # 매도선 접근
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"🟢 *매도선 접근 ({len(ready_sell)}개)*"
-            }
-        })
-        
-        if ready_sell:
-            ready_sell.sort(key=lambda x: min(
-                abs(x.get("1차매도선이격도(%)", 999)),
-                abs(x.get("2차매도선이격도(%)", 999)),
-                abs(x.get("3차매도선이격도(%)", 999))
-            ))
-            for idx, stock in enumerate(ready_sell):
-                name = stock.get("종목명", "")
-                close = stock.get("종가", 0)
-                msg = stock.get("상태메시지", "")
-                
-                if "+3%" in msg:
-                    target = stock.get("1차매도선(+3%)", 0)
-                    dist = stock.get("1차매도선이격도(%)", 0)
-                elif "+5%" in msg:
-                    target = stock.get("2차매도선(+5%)", 0)
-                    dist = stock.get("2차매도선이격도(%)", 0)
-                elif "+7%" in msg:
-                    target = stock.get("3차매도선(+7%)", 0)
-                    dist = stock.get("3차매도선이격도(%)", 0)
-                else:
-                    target = 0
-                    dist = 0
-                
-                stock_text = f"• *{name}*\n  현재가: {int(close):,}원\n  목표가: {int(round(target)) if target else 0:,}원\n  이격도: {dist:+.1f}%\n"
-                
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": stock_text
-                    }
-                })
-                
-                if idx < len(ready_sell) - 1:
-                    blocks.append({
-                        "type": "context",
-                        "elements": [
-                            {
-                                "type": "mrkdwn",
-                                "text": "‎ "
-                            }
-                        ]
-                    })
-        else:
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "‎ "
-                }
-            })
-        
-        blocks.append({
-            "type": "divider"
-        })
-        
-        # Fallback 텍스트
-        fallback_text = f"📊 일일 트레이딩 리포트 - {now}"
-        
-        return send_slack_message(fallback_text, parse_html=False, blocks=blocks)
-        
+
+        cont_header = [
+            {"type": "context",
+             "elements": [{"type": "mrkdwn",
+                           "text": f"📊 *[{system_label}] 일일 리포트 (계속)*"}]},
+            {"type": "divider"}
+        ]
+        chunks = [blocks[:MAX_BLOCKS]]
+        remaining = blocks[MAX_BLOCKS:]
+        while remaining:
+            avail = MAX_BLOCKS - len(cont_header)
+            chunks.append(cont_header + remaining[:avail])
+            remaining = remaining[avail:]
+
+        success = True
+        for j, chunk in enumerate(chunks):
+            ft = fallback_text if j == 0 else f"{fallback_text} (계속 {j+1})"
+            if not send_slack_message(ft, parse_html=False, blocks=chunk):
+                success = False
+        return success
+
     except Exception as e:
         logger.error(f"Slack 일일 리포트 포맷팅 실패: {e}")
         return False
@@ -681,7 +463,7 @@ def send_slack_daily_report(alerts: List[dict], total_stocks: int, system_label:
 # 테스트용
 if __name__ == "__main__":
     # 간단한 테스트 메시지
-    test_msg = "🤖 *Slack 봇 테스트 (S1)*\n테스트 메시지입니다!"
+    test_msg = "🤖 *Slack 봇 테스트 (S2)*\n테스트 메시지입니다!"
     
     print("Slack 테스트 메시지 전송 중...")
     if send_slack_message(test_msg, parse_html=False):

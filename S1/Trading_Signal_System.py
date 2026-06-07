@@ -1150,7 +1150,7 @@ def main():
         # 9. 텔레그램 일일 리포트 전송
         if TELEGRAM_AVAILABLE:
             try:
-                send_daily_report(alerts, len(df_summary), recipients=["all"], system_label=system_label)
+                send_daily_report(results, len(df_summary), recipients=["all"], system_label=system_label)
                 logger.info("✓ 텔레그램 일일 리포트 전송 완료")
             except Exception as e:
                 logger.error(f"텔레그램 전송 실패: {e}")
@@ -1158,7 +1158,7 @@ def main():
         # 9-1. 슬랙 일일 리포트 전송 (Block Kit 형식)
         if SLACK_AVAILABLE:
             try:
-                send_slack_daily_report(alerts, len(df_summary), system_label=system_label)
+                send_slack_daily_report(results, len(df_summary), system_label=system_label)
                 logger.info("✓ 슬랙 일일 리포트 전송 완료")
             except Exception as e:
                 logger.error(f"슬랙 전송 실패: {e}")
