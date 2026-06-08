@@ -14,6 +14,7 @@ $batFile1 = Join-Path $scriptDir "RUN_DAILY_SYSTEM.bat"
 $batFile2 = Join-Path $scriptDir "run_real_time_monitor.bat"
 $batFile3 = Join-Path $scriptDir "RUN_S1_DAILY.bat"
 $batFile4 = Join-Path $scriptDir "run_real_time_monitor_s1.bat"
+$batFile5 = Join-Path $scriptDir "run_midday_report.bat"
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "Windows 작업 스케줄러 설정 시작" -ForegroundColor Cyan
@@ -29,7 +30,7 @@ try {
 }
 
 # 기존 작업 삭제 (있다면)
-$taskNames = @("S2_Daily_Trading_Signal", "S2_Realtime_Monitor", "S1_Daily_Trading_Signal", "S1_Realtime_Monitor")
+$taskNames = @("S2_Daily_Trading_Signal", "S2_Realtime_Monitor", "S1_Daily_Trading_Signal", "S1_Realtime_Monitor", "S12_S1_Midday_Report")
 foreach ($taskName in $taskNames) {
     try {
         $schedule.GetFolder("\").DeleteTask($taskName, 0)
@@ -71,6 +72,14 @@ $settings4 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGo
 Register-ScheduledTask -TaskName "S1_Realtime_Monitor" -Action $action4 -Trigger $trigger4 -Settings $settings4 -Description "S1 실시간 주식 모니터링 (평일 08:05)" -Force | Out-Null
 Write-Host "✓ 작업 4 생성 완료: S1_Realtime_Monitor (평일 08:05, 백그라운드)" -ForegroundColor Green
 
+# 작업 5: S12 + S1 중간 점검 리포트 (평일 11:30)
+Write-Host "`n작업 5 생성 중..." -ForegroundColor Green
+$action5 = New-ScheduledTaskAction -Execute $batFile5
+$trigger5 = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At "11:30"
+$settings5 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName "S12_S1_Midday_Report" -Action $action5 -Trigger $trigger5 -Settings $settings5 -Description "S12 + S1 11:30 중간 점검 리포트 (평일)" -Force | Out-Null
+Write-Host "✓ 작업 5 생성 완료: S12_S1_Midday_Report (평일 11:30)" -ForegroundColor Green
+
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "✅ 작업 스케줄러 설정 완료!" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan
@@ -80,6 +89,7 @@ Write-Host "  1. S2_Daily_Trading_Signal - 매일 20:10 실행 (백그라운드)
 Write-Host "  2. S2_Realtime_Monitor - 평일 08:00 실행 (백그라운드)" -ForegroundColor White
 Write-Host "  3. S1_Daily_Trading_Signal - 매일 20:15 실행 (백그라운드)" -ForegroundColor White
 Write-Host "  4. S1_Realtime_Monitor - 평일 08:05 실행 (백그라운드)" -ForegroundColor White
+Write-Host "  5. S12_S1_Midday_Report - 평일 11:30 실행 (S12 + S1 중간 점검)" -ForegroundColor White
 
 Write-Host "`n백그라운드 실행 특징:" -ForegroundColor Yellow
 Write-Host "  - 모든 작업이 백그라운드에서 실행됩니다" -ForegroundColor White
