@@ -1,11 +1,12 @@
 # Windows 작업 스케줄러 자동 설정 스크립트
 # S12 트레이딩 시스템용
 
-# PowerShell 관리자 권한 체크
+# 관리자 권한 자동 상승
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
 if (-not $isAdmin) {
-    Write-Host "⚠️  관리자 권한이 필요합니다. PowerShell을 관리자 권한으로 실행해주세요." -ForegroundColor Red
-    exit 1
+    Write-Host "관리자 권한으로 재실행합니다..." -ForegroundColor Yellow
+    Start-Process powershell -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    exit
 }
 
 # 현재 스크립트 위치
