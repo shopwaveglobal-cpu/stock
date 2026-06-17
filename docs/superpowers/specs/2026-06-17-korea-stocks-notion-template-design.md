@@ -1,151 +1,192 @@
-# Korea Stocks Notion Template Design
+# 한국 주식 노션 템플릿 설계서
 
-## Goal
+## 목표
 
-Build a sellable Notion stock-trading journal template for all non-SPAC KOSPI and KOSDAQ stocks, delivered first as CSV import files plus setup documentation. The first release supports a one-time purchase product. The data pipeline and database structure must also support a later subscription product that provides weekly updates without overwriting customer-written trading journal fields.
+코스피(KOSPI), 코스닥(KOSDAQ)의 전 종목을 기반으로 판매 가능한 노션 주식 거래일지 템플릿을 만든다. 1차 버전은 노션에 바로 가져올 수 있는 CSV 파일과 설정 문서를 제공하는 방식으로 만든다.
 
-## Product Model
+이 프로젝트는 두 가지 상품을 염두에 둔다.
 
-### One-Time Product
+- 원타임 상품: 전 종목이 들어간 노션 거래일지 템플릿을 한 번 구매해서 쓰는 상품.
+- 구독 상품: 종목명 변경, 신규상장, 상장폐지, 시가총액, 재무정보, 테마 분류 등을 주기적으로 업데이트해서 제공하는 상품.
 
-The one-time product gives customers a complete Notion-ready stock master database containing current KOSPI and KOSDAQ listings, excluding SPACs. Customers can import the CSV into Notion and use it as a trading journal, watchlist, and stock research base.
+가장 중요한 설계 원칙은 사용자가 노션 템플릿에 직접 적은 매매 기록, 메모, 투자 아이디어를 업데이트 과정에서 절대 건드리지 않는 것이다.
 
-Included deliverables:
+## 1차 산출물
 
-- `stocks_master.csv`: initial Notion import file.
-- `notion_database_schema.md`: property setup guide for Notion.
-- `notion_views.md`: recommended filters, sorts, and button-like saved views.
-- `customer_setup_guide.md`: plain-language import and usage instructions.
+1차 구현은 `notion_korea_stocks_template/` 폴더 안에 아래 파일들을 만든다.
 
-### Subscription Product
+- `output/stocks_master.csv`: 노션에 최초 import할 전 종목 마스터 CSV.
+- `output/stocks_update_weekly.csv`: 구독자에게 제공할 주간 업데이트용 CSV.
+- `output/change_log.md`: 변경된 종목명, 신규상장, 제외 종목, 업데이트 요약.
+- `docs/notion_database_schema.md`: 노션 데이터베이스 속성명과 타입 설명.
+- `docs/notion_views.md`: 노션에서 만들 추천 뷰와 필터 설명.
+- `docs/update_strategy.md`: 사용자 기록을 건드리지 않고 업데이트하는 운영 방식.
+- `docs/customer_setup_guide.md`: 고객이 따라 할 수 있는 노션 import/사용 가이드.
+- `scripts/build_stocks_master.py`: 전 종목 CSV를 생성하는 실행 스크립트.
+- `scripts/build_weekly_update.py`: 주간 업데이트 CSV를 생성하는 실행 스크립트.
+- `data/theme_seed.csv`: 테마 분류를 수동으로 관리하는 시드 파일.
+- `data/excluded_stocks.csv`: 스팩 등 제외된 종목 감사 파일.
 
-The subscription product provides weekly update files for changed stock names, market metadata, market cap buckets, financial summary fields, and theme classifications. It does not include customer-owned trading journal fields.
+모든 문서형 MD 파일은 한국어를 기본으로 작성하고, 필요한 경우 괄호 안에 영어 용어를 병기한다.
 
-Included deliverables:
+## 상품 구조
 
-- `stocks_update_weekly.csv`: rows keyed by stock code, containing only provider-managed fields.
-- `change_log.md`: readable summary of changed company names, newly listed stocks, removed stocks, theme changes, and financial data refreshes.
-- Later optional automation: a Notion API updater that merges provider-managed fields by stock code.
+### 원타임 상품
 
-## Core Design Choice
+원타임 상품은 고객이 노션에 바로 가져올 수 있는 전 종목 주식 거래일지 템플릿이다. 스팩(SPAC)은 기본적으로 제외한다.
 
-Use `종목코드` as the stable unique key. Human-readable names can change, but stock codes are stable enough for the update workflow and are the best available merge key for a Notion/CSV product.
+고객은 이 템플릿을 이용해서 관심종목, 보유종목, 매수/매도 기록, 투자 아이디어, 리스크 메모, 매매 복기를 관리한다.
 
-Separate columns into two ownership groups:
+포함 파일:
 
-- Provider-managed fields: fields updated by the template seller.
-- Customer-managed fields: fields filled in by the customer and never included in weekly update CSV files.
+- `stocks_master.csv`
+- `notion_database_schema.md`
+- `notion_views.md`
+- `customer_setup_guide.md`
 
-This separation is the main protection against accidentally overwriting customer notes, trade history, tags, and decisions.
+### 구독 상품
 
-## Data Sources
+구독 상품은 매주 또는 정해진 주기로 업데이트 파일을 제공하는 상품이다. 업데이트 대상은 종목명, 시장 구분, 시가총액, 시총 구간, 재무 요약, 테마 분류 등 공급자가 관리하는 정보다.
 
-The first implementation should use source adapters so data providers can be swapped later.
+구독 업데이트 파일에는 사용자가 직접 작성하는 매매 기록, 메모, 관심도, 복기 내용이 들어가면 안 된다.
 
-Initial adapters:
+포함 파일:
 
-- KRX listing source: KOSPI/KOSDAQ stock list, market, stock code, company name, listing status, market cap when available.
-- DART source: corporate code mapping and financial statement fields for listed companies.
-- Optional price source: current price and market cap support if KRX output does not provide a usable value.
-- Theme source: manually maintained seed file for themes in version 1.
+- `stocks_update_weekly.csv`
+- `change_log.md`
+- 추후 확장: Notion API 기반 자동 업데이트 도구
 
-The old attached script is treated as reference only. Its useful ideas are:
+## 핵심 설계 선택
 
-- DART corporate code mapping.
-- Annual financial account extraction.
-- Static financial ratios.
-- Excel/CSV generation pipeline.
+`종목코드`를 고유키로 사용한다.
 
-The new project should not copy its broken encoding, hard-coded local paths, or API key.
+종목명은 변경될 수 있지만 종목코드는 업데이트 병합 기준으로 쓰기에 가장 안정적이다. 노션에서도 `종목코드`를 텍스트 속성으로 보관하고, 모든 업데이트 파일은 이 값을 기준으로 만든다.
 
-## Exclusions
+필드는 두 그룹으로 나눈다.
 
-SPACs should be excluded from the customer-facing master CSV by default.
+- 공급자 관리 필드: 우리가 주기적으로 업데이트하는 정보.
+- 사용자 관리 필드: 고객이 직접 쓰는 매매일지, 메모, 판단 기록.
 
-Version 1 SPAC detection:
+이 분리가 구독 업데이트 상품의 핵심이다. 업데이트 CSV는 공급자 관리 필드만 포함해야 하며, 사용자 관리 필드는 포함하지 않는다.
 
-- Exclude rows whose name contains `스팩`, `기업인수목적`, `SPAC`, or `Special Purpose Acquisition`.
-- Keep an internal `excluded_stocks.csv` audit file so the seller can review what was removed.
+## 데이터 소스
 
-Future versions may add ETF, ETN, REIT, preferred share, and KONEX controls, but version 1 only commits to excluding SPACs from KOSPI/KOSDAQ stocks.
+처음부터 데이터 수집 코드를 분리된 어댑터(adapter) 구조로 만든다. 그래야 나중에 KRX, DART, 네이버금융, 다른 데이터 공급원 중 일부가 바뀌어도 전체 구조를 갈아엎지 않아도 된다.
 
-## Notion Database Schema
+1차 구현에서 고려할 소스:
 
-### Identity Fields
+- KRX 상장 종목 데이터: 종목코드, 종목명, 시장, 상장 상태, 시가총액 등.
+- DART 데이터: DART 기업코드, 재무제표 주요 계정.
+- 가격/시총 보조 데이터: KRX 데이터만으로 부족할 때 현재가, 발행주식수, 시총 보완.
+- 테마 데이터: 1차 버전은 직접 관리하는 CSV 파일로 시작.
 
-- `종목명`: title property.
-- `종목코드`: text property, six-digit zero-padded code.
-- `시장`: select, values `KOSPI` and `KOSDAQ`.
-- `데이터 기준일`: date.
-- `상태`: select, values `정상`, `신규상장`, `상장폐지`, `종목명변경`, `검토필요`.
+첨부된 기존 코드는 참고만 한다. 가져올 아이디어는 DART 기업코드 매핑, 재무 계정 추출, CSV/엑셀 생성 흐름이다.
 
-### Provider-Managed Fields
+새 구현에서는 아래 문제를 반복하지 않는다.
 
-- `업종`: select or text.
-- `테마`: multi-select.
-- `시가총액`: number.
-- `시총구간`: select, values `5조 이상`, `1조-5조`, `5천억-1조`, `1천억-5천억`, `1천억 미만`, `미분류`.
-- `시총 5조 이상`: checkbox.
-- `현재가`: number.
-- `발행주식수`: number.
-- `DART코드`: text.
-- `자본총계`: number.
-- `부채총계`: number.
-- `유동자산`: number.
-- `유동부채`: number.
-- `재고자산`: number.
-- `매출액 최근연도`: number.
-- `영업이익 최근연도`: number.
-- `당기순이익 최근연도`: number.
-- `부채비율`: number.
-- `유동비율`: number.
-- `당좌비율`: number.
-- `자본잠식 여부`: checkbox.
-- `재무주의`: checkbox.
-- `분석메모_공급자`: text.
+- 깨진 한글 인코딩 사용 금지.
+- 로컬 절대 경로 하드코딩 금지.
+- API 키 코드에 직접 삽입 금지.
+- 한 파일에 수집, 변환, 출력 로직을 모두 몰아넣지 않기.
 
-### Customer-Managed Fields
+## 제외 기준
 
-- `관심도`: select.
-- `보유여부`: checkbox.
-- `매수예정가`: number.
-- `목표가`: number.
-- `손절가`: number.
-- `매수일`: date.
-- `매도일`: date.
-- `투자아이디어`: text.
-- `리스크메모`: text.
-- `매매복기`: text.
-- `내 태그`: multi-select.
+1차 버전에서는 스팩(SPAC)을 고객용 master CSV에서 제외한다.
 
-Weekly update CSV files must never include customer-managed fields.
+스팩 제외 규칙:
 
-## Notion Views
+- 종목명에 `스팩`이 포함된 경우 제외.
+- 종목명에 `기업인수목적`이 포함된 경우 제외.
+- 종목명에 `SPAC`이 포함된 경우 제외.
+- 종목명에 `Special Purpose Acquisition`이 포함된 경우 제외.
 
-Notion buttons have limited support for complex database filtering across duplicated customer templates, so version 1 should use named views that act like button presets.
+제외된 종목은 `data/excluded_stocks.csv`에 남긴다. 이렇게 해야 나중에 고객 문의나 데이터 검수 때 “왜 빠졌는지” 확인할 수 있다.
 
-Recommended views:
+ETF, ETN, 리츠(REIT), 우선주, 코넥스(KONEX)는 1차 범위에 포함하지 않는다. 이번 버전에서 확정하는 제외 정책은 스팩 제외다.
 
-- `전체 종목`: all rows, sorted by market cap descending.
-- `KOSPI`: market equals KOSPI.
-- `KOSDAQ`: market equals KOSDAQ.
-- `시총 5조 이상`: `시총 5조 이상` checked.
-- `대형주`: `시총구간` equals `5조 이상` or `1조-5조`.
-- `재무주의`: `재무주의` checked.
-- `테마별 보기`: grouped by `테마`.
-- `내 관심종목`: `관심도` is not empty.
-- `보유 종목`: `보유여부` checked.
-- `매매일지`: rows where `매수일` or `매도일` is not empty.
+## 노션 데이터베이스 스키마
 
-Future versions can add a Notion API setup script that creates the database and views automatically.
+### 기본 식별 필드
 
-## Theme Classification
+| 속성명 | 노션 타입 | 설명 |
+| --- | --- | --- |
+| 종목명 | Title | 노션 페이지 제목으로 사용할 회사명 |
+| 종목코드 | Text | 6자리 종목코드, 앞자리 0 유지 |
+| 시장 | Select | KOSPI, KOSDAQ |
+| 데이터 기준일 | Date | 해당 데이터가 생성된 날짜 |
+| 상태 | Select | 정상, 신규상장, 상장폐지, 종목명변경, 검토필요 |
 
-Version 1 should start with a manually editable theme seed file:
+### 공급자 관리 필드
 
-`data/theme_seed.csv`
+| 속성명 | 노션 타입 | 설명 |
+| --- | --- | --- |
+| 업종 | Select 또는 Text | 거래소/데이터 소스 기준 업종 |
+| 테마 | Multi-select | 반도체, 2차전지, 바이오 등 |
+| 시가총액 | Number | 원 단위 또는 억 원 단위 중 구현 시 하나로 고정 |
+| 시총구간 | Select | 5조 이상, 1조-5조, 5천억-1조, 1천억-5천억, 1천억 미만, 미분류 |
+| 시총 5조 이상 | Checkbox | 빠른 필터용 |
+| 현재가 | Number | 기준일 현재가 |
+| 발행주식수 | Number | 발행주식수 |
+| DART코드 | Text | DART 기업코드 |
+| 자본총계 | Number | 최근 연도 기준 |
+| 부채총계 | Number | 최근 연도 기준 |
+| 유동자산 | Number | 최근 연도 기준 |
+| 유동부채 | Number | 최근 연도 기준 |
+| 재고자산 | Number | 최근 연도 기준 |
+| 매출액 최근연도 | Number | 최근 연도 기준 |
+| 영업이익 최근연도 | Number | 최근 연도 기준 |
+| 당기순이익 최근연도 | Number | 최근 연도 기준 |
+| 부채비율 | Number | 부채총계 / 자본총계 |
+| 유동비율 | Number | 유동자산 / 유동부채 |
+| 당좌비율 | Number | (유동자산 - 재고자산) / 유동부채 |
+| 자본잠식 여부 | Checkbox | 자본총계가 자본금보다 낮은 경우 |
+| 재무주의 | Checkbox | 유동비율/당좌비율/자본잠식 등 위험 조건 |
+| 분석메모_공급자 | Text | 공급자가 제공하는 간단한 재무 코멘트 |
 
-Columns:
+### 사용자 관리 필드
+
+| 속성명 | 노션 타입 | 설명 |
+| --- | --- | --- |
+| 관심도 | Select | 고객이 직접 정하는 관심도 |
+| 보유여부 | Checkbox | 현재 보유 중인지 여부 |
+| 매수예정가 | Number | 고객의 계획 가격 |
+| 목표가 | Number | 고객의 목표 가격 |
+| 손절가 | Number | 고객의 손절 기준 |
+| 매수일 | Date | 실제 또는 계획 매수일 |
+| 매도일 | Date | 실제 또는 계획 매도일 |
+| 투자아이디어 | Text | 고객의 투자 가설 |
+| 리스크메모 | Text | 고객이 보는 리스크 |
+| 매매복기 | Text | 매매 후 복기 |
+| 내 태그 | Multi-select | 고객 개인 태그 |
+
+주간 업데이트 CSV에는 사용자 관리 필드를 절대 넣지 않는다.
+
+## 추천 노션 뷰
+
+노션의 버튼 기능은 복제된 템플릿 환경에서 복잡한 필터를 안정적으로 자동 생성하기 어렵다. 1차 버전에서는 “버튼처럼 쓰는 저장된 뷰”를 제공한다.
+
+추천 뷰:
+
+- `전체 종목`: 모든 종목, 시가총액 내림차순.
+- `KOSPI`: 시장이 KOSPI인 종목.
+- `KOSDAQ`: 시장이 KOSDAQ인 종목.
+- `시총 5조 이상`: `시총 5조 이상` 체크된 종목.
+- `대형주`: `시총구간`이 `5조 이상` 또는 `1조-5조`.
+- `재무주의`: `재무주의`가 체크된 종목.
+- `테마별 보기`: `테마` 기준 그룹화.
+- `내 관심종목`: `관심도`가 비어 있지 않은 종목.
+- `보유 종목`: `보유여부`가 체크된 종목.
+- `매매일지`: `매수일` 또는 `매도일`이 있는 종목.
+
+나중에 Notion API 버전으로 확장하면 데이터베이스와 뷰를 자동 생성할 수 있다.
+
+## 테마 분류
+
+1차 버전의 테마 분류는 수동 관리 CSV로 시작한다.
+
+파일: `data/theme_seed.csv`
+
+컬럼:
 
 - `종목코드`
 - `종목명`
@@ -153,36 +194,48 @@ Columns:
 - `테마근거`
 - `검수상태`
 
-The generated master CSV maps `테마` into a Notion multi-select compatible comma-separated value. Example: Samsung Electronics can have `반도체`.
+예시:
 
-The first release may ship with a partial theme map as long as the documentation clearly labels unclassified rows as `미분류`. A later subscription value proposition is continuous theme curation.
+| 종목코드 | 종목명 | 테마 | 테마근거 | 검수상태 |
+| --- | --- | --- | --- | --- |
+| 005930 | 삼성전자 | 반도체 | 메모리/파운드리/시스템반도체 주요 기업 | 검수완료 |
 
-## Update Strategy
+노션의 multi-select에 맞게 생성 CSV에서는 여러 테마를 쉼표로 구분한다.
 
-Version 1 weekly updates are delivered as CSV plus instructions:
+모든 종목을 처음부터 완벽히 분류하지 않아도 된다. 미분류 종목은 `미분류`로 표시하고, 구독 상품의 가치 중 하나를 “테마 지속 업데이트”로 둔다.
 
-1. Customers keep their original trading journal database.
-2. The seller provides `stocks_update_weekly.csv`.
-3. Customers import the update CSV into a separate temporary Notion database.
-4. Customers manually review changed fields and newly listed rows.
-5. The seller may provide a guided copy/paste workflow for changed rows only.
+## 업데이트 전략
 
-This is not the final best experience, but it avoids promising more than Notion CSV import can reliably do.
+### 1차 버전: CSV 기반 업데이트
 
-Version 2 should add a Notion API updater:
+1차 구독 업데이트는 CSV와 설명 문서로 제공한다.
 
-- Customer shares their database with the integration.
-- Updater reads rows by `종목코드`.
-- Updater changes provider-managed properties only.
-- Updater skips customer-managed properties.
-- Updater adds newly listed stocks.
-- Updater marks delisted stocks as `상장폐지` instead of deleting them.
+흐름:
 
-Deletion should never be the default behavior because customers may have trade notes attached to old rows.
+1. 고객은 기존 노션 거래일지 데이터베이스를 유지한다.
+2. 공급자는 `stocks_update_weekly.csv`를 제공한다.
+3. 고객은 업데이트 CSV를 별도의 임시 노션 데이터베이스로 import한다.
+4. 고객은 변경된 종목명, 신규상장, 주요 재무정보, 테마 변경을 확인한다.
+5. 필요한 정보만 기존 데이터베이스에 반영한다.
 
-## Generated File Structure
+이 방식은 완전 자동은 아니지만, 노션 CSV import만으로 사용자 데이터를 안전하게 보호하려면 가장 현실적이다.
 
-Create a new project folder:
+### 2차 버전: Notion API 자동 업데이트
+
+추후에는 Notion API를 이용해 자동 업데이트 도구를 만든다.
+
+자동 업데이트 원칙:
+
+- 고객이 자신의 노션 데이터베이스를 integration에 공유한다.
+- 업데이트 도구는 `종목코드`로 기존 행을 찾는다.
+- 공급자 관리 필드만 수정한다.
+- 사용자 관리 필드는 읽거나 수정하지 않는다.
+- 신규상장 종목은 새 행으로 추가한다.
+- 상장폐지 종목은 삭제하지 않고 `상장폐지` 상태로 표시한다.
+
+삭제를 기본 동작으로 만들지 않는다. 상장폐지 종목에도 고객의 매매 기록과 메모가 남아 있을 수 있기 때문이다.
+
+## 파일 구조
 
 ```text
 notion_korea_stocks_template/
@@ -204,23 +257,23 @@ notion_korea_stocks_template/
     customer_setup_guide.md
 ```
 
-## Implementation Principles
+## 구현 원칙
 
-- Keep data-source code separate from transformation code.
-- Do not hard-code API keys or local absolute paths.
-- Generate deterministic CSV column order for Notion imports.
-- Use UTF-8 with BOM for CSV files so Korean text opens cleanly in Excel.
-- Treat network collection failures as recoverable row-level errors.
-- Produce an audit file for excluded SPACs and rows with missing critical data.
-- Prefer a small first version that can be sold and updated over a large unfinished automation system.
+- 데이터 수집, 데이터 변환, CSV 출력, 문서 생성을 분리한다.
+- API 키와 개인 로컬 경로를 코드에 하드코딩하지 않는다.
+- 노션 import용 CSV 컬럼 순서를 항상 동일하게 유지한다.
+- 한국어가 깨지지 않도록 CSV는 UTF-8 with BOM(`utf-8-sig`)으로 저장한다.
+- 네트워크 오류가 나도 전체 실행이 중단되지 않도록 종목별 오류를 기록한다.
+- 제외된 스팩과 중요 데이터가 누락된 종목은 감사 파일로 남긴다.
+- 처음부터 완벽한 자동화를 만들기보다 판매 가능한 1차 버전을 먼저 만든다.
 
-## Validation
+## 검증 기준
 
-The first implementation is successful when:
+1차 구현은 아래 조건을 만족해야 완료로 본다.
 
-- A sample run generates `stocks_master.csv` with the agreed schema.
-- SPAC-like names are excluded and listed in `excluded_stocks.csv`.
-- Customer-managed fields exist in the master CSV but are absent from the weekly update CSV.
-- The generated docs explain Notion import, views, and update limitations honestly.
-- Tests verify SPAC filtering, market cap bucketing, column ownership separation, and CSV column order.
+- `stocks_master.csv`가 합의한 스키마와 컬럼 순서로 생성된다.
+- 스팩으로 판단된 종목은 master CSV에서 제외되고 `excluded_stocks.csv`에 남는다.
+- 사용자 관리 필드는 master CSV에는 포함되지만 weekly update CSV에는 포함되지 않는다.
+- 고객용 문서가 한국어로 작성되어 있고, 노션 import와 업데이트 한계를 솔직하게 설명한다.
+- 테스트가 스팩 필터링, 시총 구간 분류, 필드 소유권 분리, CSV 컬럼 순서를 검증한다.
 
