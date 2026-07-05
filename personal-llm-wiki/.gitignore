@@ -1,0 +1,5 @@
+# 내부 전용(외부 공유 금지) 원본은 git에 올리지 않는다 — origin이 공개 저장소임
+raw/inbox/PORTFOLIO_LOGIC_FULL.md
+# Obsidian 개인 상태 (workspace 등)는 제외, app.json만 유지
+.obsidian/*
+!.obsidian/app.json
