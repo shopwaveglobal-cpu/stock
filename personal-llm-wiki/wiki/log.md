@@ -1,5 +1,9 @@
 # 작업 이력 (최신이 위)
 
+- 2026-07-06 | ingest | 2026-06-morning-brief-readme.md (실제 기록 8호) | sources 1, projects/stock-automation 갱신. PORTFOLIO 총람과 교차 확인 — 충돌 없음
+
+- 2026-07-06 | ingest | 2026-06-07-taesan-design.md (실제 기록 7호) | sources 1, decisions 1, concepts/cycle-state-machine 신규(OMG↔Taesan 공통 패턴), projects/stock-automation 갱신
+
 - 2026-07-06 | resolve | **충돌 #5 종결** | CoinRedS·Upbit1515는 다른 PC에 존재(사용자 확인). 이 wiki는 이 PC 기준 — 해당 시스템은 범위 밖으로 기록
 
 - 2026-07-06 | ingest | 2026-06-17-korea-stocks-notion-template-design.md (실제 기록 6호) | sources 1, decisions 1, projects/korea-stocks-notion-template 신규, concepts/windows-automation-pitfalls 갱신(utf-8-sig 규칙 추가)

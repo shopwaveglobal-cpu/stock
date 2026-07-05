@@ -28,6 +28,7 @@
 - [windows-automation-pitfalls](concepts/windows-automation-pitfalls.md) — pythonw 금지, ps1 BOM, 재시작 진입점 1개 등 실전 함정
 - [krx-tick-size](concepts/krx-tick-size.md) — 한국 주식 호가 단위 표 (공개 정보)
 - [dynamic-polling-interval](concepts/dynamic-polling-interval.md) — 거리 기반 동적 폴링 주기 (OMG 제안 + S12 실운영)
+- [cycle-state-machine](concepts/cycle-state-machine.md) — 저점→급등→고점→급락 사이클 패턴 (OMG + Taesan 공통)
 
 ## decisions
 
@@ -35,6 +36,7 @@
 - [2026-06-13 S1/S12 단일 supervisor 전환](decisions/2026-06-13-single-supervisor.md)
 - [2025-11 OMG: WebSocket 대신 폴링 유지](decisions/2025-11-omg-polling-over-websocket.md) — 재검증 필요 표시
 - [2026-06-17 노션 템플릿: 사용자 데이터 보호 원칙](decisions/2026-06-17-notion-template-user-data-protection.md)
+- [2026-06-07 Taesan: 트레일링 상태기계](decisions/2026-06-07-taesan-trailing-state-machine.md)
 
 ## errors
 
@@ -49,6 +51,8 @@
 - [2025-11 OMG 실시간 모니터링 가이드 — 오래된 문서 표시](sources/2025-11-02-omg-realtime-monitoring-guide.md)
 - [2025-11-07 OMG 업데이트/모니터링 분리 보고서](sources/2025-11-07-omg-separation-summary.md)
 - [2026-06-17 한국 주식 노션 템플릿 설계서](sources/2026-06-17-korea-stocks-notion-template-design.md)
+- [2026-06-07 Taesan 모니터링 설계서](sources/2026-06-07-taesan-design.md)
+- [Morning Brief 데이터 적재 구조](sources/2026-06-morning-brief-readme.md) — jpy 단위 함정 포함
 
 ## syntheses
 

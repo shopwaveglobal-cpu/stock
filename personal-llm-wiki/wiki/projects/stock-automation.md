@@ -10,7 +10,7 @@
 | S12 | 거래대금 기반 실시간 매수선 모니터 (계산 로직 S1과 공유, S12가 소스) | 동일 |
 | OMG | 크립토 사이클 엔진 (Binance/CoinGecko) | 동일 |
 | Taesan Scanner | 한국 주식 스캐너 (Kiwoom), 상수는 taesan/config.py 실재 | 동일 |
-| Morning Brief / NASDAQ Brief | 매크로·나스닥 카드 생성 및 발송 | 동일 |
+| Morning Brief / NASDAQ Brief | 매크로·나스닥 카드 생성 및 발송. 적재 구조는 [sources/2026-06-morning-brief-readme](../sources/2026-06-morning-brief-readme.md) (jpy 단위 함정 주의) | 동일 |
 
 ## 실행 관리 (사실)
 
@@ -26,6 +26,7 @@
 | 2026-07-05 | supervisor 정상 동작 재확인, 로직 총람 인입 | [sources/portfolio-logic-full](../sources/portfolio-logic-full.md) |
 | 2025-11경 | OMG 모니터링: WebSocket 검토 후 폴링 유지 결정 | [decisions/2025-11-omg-polling-over-websocket](../decisions/2025-11-omg-polling-over-websocket.md) |
 | 2025-11-07 | OMG 일일 업데이트 중복 실행 해결 (업데이트/모니터링 분리) | [errors/2025-11-07-omg-duplicate-daily-update](../errors/2025-11-07-omg-duplicate-daily-update.md) |
+| 2026-06-07 | Taesan 스캐너 설계 (트레일링 상태기계) | [decisions/2026-06-07-taesan-trailing-state-machine](../decisions/2026-06-07-taesan-trailing-state-machine.md) |
 
 ## 열린 항목
 
