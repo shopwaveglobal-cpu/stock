@@ -14,7 +14,7 @@
 | 2 | 실시간 모니터 안정화 방식 | watchdog 보완 (가상 샘플) | 단일 supervisor (실제) | 종결 — 실제 기록 채택, 샘플 은퇴 | [decisions/2026-06-13-single-supervisor](decisions/2026-06-13-single-supervisor.md) |
 | 3 | 실시간 모니터의 실체 | 거래대금 급증 알림 (가상 샘플) | S1·S12 매수선 모니터 (실제) | 종결 — 실제 기록 채택, 샘플 은퇴 | [sources/portfolio-logic-full](sources/portfolio-logic-full.md) |
 | 4 | stockcalc 실체 | vanilla JS 웹앱 (가상 샘플) | C# WinForms v2.9 + iOS 포팅 (실제) | 종결 — 실제 기록 채택, 샘플 은퇴 | [sources/2026-06-10-stockcalc-ios-appstore](sources/2026-06-10-stockcalc-ios-appstore.md) |
-| 5 | OMG 모니터링 구성 | Envelope 10분 + 업비트 1시간, omg 내 (가이드, ~2025-11-02) | crypto_realtime_monitor 5분 주기 + daily_update 00:00 분리 (분리 보고서 2025-11-07, 최신) | **부분 해소** — OMG 자체 구성은 확정(하트비트로 가동 실증, 2026-07-06). CoinRedS·Upbit1515 위치만 미확인(이 PC 전체 수색 결과 없음 — 다른 PC 또는 폐기 추정) | [sources/2025-11-07-omg-separation-summary](sources/2025-11-07-omg-separation-summary.md) |
+| 5 | OMG 모니터링 구성 | Envelope 10분 + 업비트 1시간, omg 내 (가이드, ~2025-11-02) | crypto_realtime_monitor 5분 주기 + daily_update 00:00 분리 (분리 보고서 2025-11-07, 최신) | **종결** — OMG 구성 확정(하트비트 실증). CoinRedS·Upbit1515는 **다른 PC에 존재**(사용자 확인, 2026-07-06). 이 wiki는 이 PC 기준으로만 기록하며 해당 시스템은 범위 밖 | [sources/2025-11-07-omg-separation-summary](sources/2025-11-07-omg-separation-summary.md) |
 
 ## projects
 
