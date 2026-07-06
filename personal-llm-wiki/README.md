@@ -30,6 +30,15 @@ tests/      평가 케이스(evals.md)와 결과(test-results.md)
 
 운영 규칙 전체는 [CLAUDE.md](CLAUDE.md) 참고.
 
+## 여러 PC에서 쓰기
+
+동기화 수단은 git(GitHub origin)이다.
+
+1. 다른 PC 최초 1회: `git clone https://github.com/shopwaveglobal-cpu/stock.git` 후 이 폴더를 Obsidian 볼트로 열기
+2. **작업 시작 전 `git pull`, 끝나면 커밋 + push** — 두 PC 동시 수정 금지
+3. 주의: `raw/inbox/PORTFOLIO_LOGIC_FULL.md`(내부 전용 실수치)는 .gitignore로 제외되어 git으로 안 넘어감 — 필요하면 직접 복사
+4. 인입 규칙은 어느 PC에서든 동일: raw/inbox/에 1개 → wiki-ingest
+
 ## Obsidian에서 열기
 
 1. Obsidian → 좌하단 볼트 아이콘 → **"Open folder as vault"** → 이 폴더(`personal-llm-wiki`) 선택
