@@ -24,6 +24,7 @@
 | 2026-06-08경 | 재시작 루프 누적 장애 인지 | [errors/2026-06-13-restart-loop-accumulation](../errors/2026-06-13-restart-loop-accumulation.md) |
 | 2026-06-13 | 단일 supervisor 전환 + 자동 재기동 검증 | [decisions/2026-06-13-single-supervisor](../decisions/2026-06-13-single-supervisor.md) |
 | 2026-07-05 | supervisor 정상 동작 재확인, 로직 총람 인입 | [sources/portfolio-logic-full](../sources/portfolio-logic-full.md) |
+| 2025-10-12 | OMG 개발 이력 요약 (당시 파일 구성·역할) | [sources/2025-10-12-omg-conversation-summary](../sources/2025-10-12-omg-conversation-summary.md) |
 | 2025-11경 | OMG 모니터링: WebSocket 검토 후 폴링 유지 결정 | [decisions/2025-11-omg-polling-over-websocket](../decisions/2025-11-omg-polling-over-websocket.md) |
 | 2025-11-07 | OMG 일일 업데이트 중복 실행 해결 (업데이트/모니터링 분리) | [errors/2025-11-07-omg-duplicate-daily-update](../errors/2025-11-07-omg-duplicate-daily-update.md) |
 | 2026-06-07 | Taesan 스캐너 설계 (트레일링 상태기계) | [decisions/2026-06-07-taesan-trailing-state-machine](../decisions/2026-06-07-taesan-trailing-state-machine.md) |

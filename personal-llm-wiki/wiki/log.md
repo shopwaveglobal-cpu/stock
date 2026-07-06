@@ -1,5 +1,8 @@
 # 작업 이력 (최신이 위)
 
+- 2026-07-06 | ingest | 2025-10-12-omg-conversation-summary.md (실제 기록 10호) | sources 1, projects/stock-automation 갱신. 시간순 위치 명시(분리 보고서가 최신)
+- 2026-07-06 | ingest | 2026-06-30-1im-video-tool-design.md (실제 기록 9호) | sources 1, decisions 1(로컬 전용+원본 불변 — 노션 템플릿과 같은 철학으로 연결), projects/local-first-apps 갱신
+
 - 2026-07-06 | ingest | 2026-06-morning-brief-readme.md (실제 기록 8호) | sources 1, projects/stock-automation 갱신. PORTFOLIO 총람과 교차 확인 — 충돌 없음
 
 - 2026-07-06 | ingest | 2026-06-07-taesan-design.md (실제 기록 7호) | sources 1, decisions 1, concepts/cycle-state-machine 신규(OMG↔Taesan 공통 패턴), projects/stock-automation 갱신

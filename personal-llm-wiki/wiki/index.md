@@ -37,6 +37,7 @@
 - [2025-11 OMG: WebSocket 대신 폴링 유지](decisions/2025-11-omg-polling-over-websocket.md) — 재검증 필요 표시
 - [2026-06-17 노션 템플릿: 사용자 데이터 보호 원칙](decisions/2026-06-17-notion-template-user-data-protection.md)
 - [2026-06-07 Taesan: 트레일링 상태기계](decisions/2026-06-07-taesan-trailing-state-machine.md)
+- [2026-06-30 1IM: 로컬 전용 + 원본 불변](decisions/2026-06-30-1im-local-only-safety.md)
 
 ## errors
 
@@ -53,6 +54,8 @@
 - [2026-06-17 한국 주식 노션 템플릿 설계서](sources/2026-06-17-korea-stocks-notion-template-design.md)
 - [2026-06-07 Taesan 모니터링 설계서](sources/2026-06-07-taesan-design.md)
 - [Morning Brief 데이터 적재 구조](sources/2026-06-morning-brief-readme.md) — jpy 단위 함정 포함
+- [2026-06-30 1IM Video Tool 설계서](sources/2026-06-30-1im-video-tool-design.md)
+- [2025-10-12 OMG 개발 대화 요약 — 구버전 구조 표시](sources/2025-10-12-omg-conversation-summary.md)
 
 ## syntheses
 
