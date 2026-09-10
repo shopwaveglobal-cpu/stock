@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,11 @@ from Daily_Turnover_Tracker import (  # noqa: E402
     save_to_excel,
     select_stock_condition,
 )
+
+S1_SIGNAL_PATH = S12_DIR.parent / "S1" / "Trading_Signal_System.py"
+S1_SIGNAL_SPEC = importlib.util.spec_from_file_location("s1_trading_signal_system", S1_SIGNAL_PATH)
+s1_signal_system = importlib.util.module_from_spec(S1_SIGNAL_SPEC)
+S1_SIGNAL_SPEC.loader.exec_module(s1_signal_system)
 
 
 class SelectionConditionTests(unittest.TestCase):
@@ -203,6 +209,10 @@ class SelectionConditionAlertTests(unittest.TestCase):
     def test_notifications_remain_enabled_by_default(self):
         with patch.dict(os.environ, {}, clear=True):
             self.assertTrue(signal_system.notifications_enabled(False))
+
+    def test_s1_notification_env_switch_disables_external_messages(self):
+        with patch.dict(os.environ, {"STOCK_AUTOMATION_NO_NOTIFY": "1"}):
+            self.assertFalse(s1_signal_system.notifications_enabled(False))
 
     def test_signal_result_keeps_selection_metadata_from_universe(self):
         result = {"티커": "005930", "종목명": "삼성전자"}
