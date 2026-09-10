@@ -196,6 +196,14 @@ class SelectionConditionTests(unittest.TestCase):
 
 
 class SelectionConditionAlertTests(unittest.TestCase):
+    def test_notification_env_switch_disables_external_messages(self):
+        with patch.dict(os.environ, {"STOCK_AUTOMATION_NO_NOTIFY": "1"}):
+            self.assertFalse(signal_system.notifications_enabled(False))
+
+    def test_notifications_remain_enabled_by_default(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(signal_system.notifications_enabled(False))
+
     def test_signal_result_keeps_selection_metadata_from_universe(self):
         result = {"티커": "005930", "종목명": "삼성전자"}
         universe_row = pd.Series(

@@ -1023,6 +1023,12 @@ def attach_selection_metadata(result: dict, universe_row: pd.Series) -> dict:
     return result
 
 
+def notifications_enabled(cli_no_notify: bool) -> bool:
+    """명시적 점검 실행에서는 외부 알림을 확실히 차단한다."""
+    env_disabled = os.getenv("STOCK_AUTOMATION_NO_NOTIFY", "").strip().lower()
+    return not cli_no_notify and env_disabled not in {"1", "true", "yes"}
+
+
 # ==================== 메인 ====================
 def main():
     parser = argparse.ArgumentParser(description="Trading Signal System")
@@ -1040,6 +1046,7 @@ def main():
     universe_file = args.universe
     signal_file = args.signal
     alert_threshold = args.alert_threshold
+    notify = notifications_enabled(args.no_notify)
     
     try:
         logger.info("=" * 80)
@@ -1064,7 +1071,7 @@ def main():
             token = os.getenv("KIWOOM_TOKEN") or get_api_token(args.appkey, args.secret)
         except Exception as e:
             logger.error(f"API 토큰 획득 실패: {e}")
-            if TELEGRAM_AVAILABLE and not args.no_notify:
+            if TELEGRAM_AVAILABLE and notify:
                 send_error_alert(f"API 토큰 획득 실패: {e}", "Trading_Signal_System")
             sys.exit(1)
         
@@ -1159,7 +1166,7 @@ def main():
             system_label = "S12"
 
         # 9. 슬랙 일일 리포트 전송 (Block Kit 형식) — Telegram 리포트 미사용
-        if SLACK_AVAILABLE and not args.no_notify:
+        if SLACK_AVAILABLE and notify:
             try:
                 send_slack_daily_report(results, len(df_summary), system_label=system_label)
                 logger.info("✓ 슬랙 일일 리포트 전송 완료")
@@ -1175,7 +1182,7 @@ def main():
     
     except Exception as e:
         logger.error(f"예기치 않은 오류 발생: {e}", exc_info=True)
-        if TELEGRAM_AVAILABLE and not args.no_notify:
+        if TELEGRAM_AVAILABLE and notify:
             send_error_alert(f"예기치 않은 오류: {str(e)}", "Trading_Signal_System")
         sys.exit(1)
 
