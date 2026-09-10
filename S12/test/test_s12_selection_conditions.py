@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from datetime import date
 from pathlib import Path
 from unittest.mock import patch
@@ -18,6 +19,8 @@ S12_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(S12_DIR))
 
 import Daily_Turnover_Tracker as tracker  # noqa: E402
+import Trading_Signal_System as signal_system  # noqa: E402
+import telegram_notifier  # noqa: E402
 from Daily_Turnover_Tracker import (  # noqa: E402
     append_to_excel,
     calculate_market_cap_eok,
@@ -33,8 +36,8 @@ class SelectionConditionTests(unittest.TestCase):
     def test_s2_2_includes_exact_boundary(self):
         self.assertEqual(select_stock_condition(100_000, 3_000, True), "S2-2")
 
-    def test_s2_2_has_priority_when_both_conditions_match(self):
-        self.assertEqual(select_stock_condition(100_000, 5_000, True), "S2-2")
+    def test_reports_both_conditions_when_both_match(self):
+        self.assertEqual(select_stock_condition(100_000, 5_000, True), "S2-1+S2-2")
 
     def test_rejects_stock_between_market_cap_tiers_below_5000_turnover(self):
         self.assertIsNone(select_stock_condition(99_999.99, 4_999.99, True))
@@ -64,12 +67,15 @@ class SelectionConditionTests(unittest.TestCase):
             workbook = Path(temp_dir) / "turnover_universe.xlsx"
             today = date.today()
 
-            append_to_excel(workbook, [(today, "005930", "A", 5_000.0)])
+            append_to_excel(
+                workbook,
+                [(today, "005930", "A", 100_000.0, 5_000.0, "S2-1+S2-2")],
+            )
             append_to_excel(
                 workbook,
                 [
-                    (today, "005930", "A", 6_000.0),
-                    (today, "000660", "B", 7_000.0),
+                    (today, "005930", "A", 110_000.0, 4_000.0, "S2-2"),
+                    (today, "000660", "B", 60_000.0, 7_000.0, "S2-1"),
                 ],
             )
 
@@ -78,7 +84,34 @@ class SelectionConditionTests(unittest.TestCase):
 
             self.assertEqual(len(saved), 2)
             self.assertEqual(existing["누적횟수"], 1)
-            self.assertEqual(existing["거래대금(억)"], 6_000.0)
+            self.assertEqual(existing["거래대금(억)"], 4_000.0)
+            self.assertEqual(existing["시가총액(억)"], 110_000.0)
+            self.assertEqual(existing["선정조건"], "S2-2")
+
+    def test_corrupt_existing_workbook_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workbook = Path(temp_dir) / "turnover_universe.xlsx"
+            original = b"not-an-xlsx"
+            workbook.write_bytes(original)
+
+            with self.assertRaises(Exception):
+                append_to_excel(
+                    workbook,
+                    [(date.today(), "005930", "A", 100_000.0, 5_000.0, "S2-1+S2-2")],
+                )
+
+            self.assertEqual(workbook.read_bytes(), original)
+
+    def test_saved_workbook_is_a_valid_zip_archive(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workbook = Path(temp_dir) / "turnover_universe.xlsx"
+            append_to_excel(
+                workbook,
+                [(date.today(), "005930", "A", 100_000.0, 5_000.0, "S2-1+S2-2")],
+            )
+
+            with zipfile.ZipFile(workbook) as archive:
+                self.assertIsNone(archive.testzip())
 
     def test_collection_flow_applies_both_tiers_and_rejects_non_matches(self):
         rank_response = {
@@ -132,6 +165,45 @@ class SelectionConditionTests(unittest.TestCase):
 
             self.assertEqual(selected_count, 2)
             self.assertEqual(set(saved["티커"]), {"000001", "000002"})
+            self.assertEqual(
+                saved.set_index("티커").loc["000002", "선정조건"],
+                "S2-2",
+            )
+
+
+class SelectionConditionAlertTests(unittest.TestCase):
+    def test_signal_result_keeps_selection_metadata_from_universe(self):
+        result = {"티커": "005930", "종목명": "삼성전자"}
+        universe_row = pd.Series(
+            {
+                "선정조건": "S2-1+S2-2",
+                "시가총액(억)": 500_000.0,
+                "거래대금(억)": 8_000.0,
+            }
+        )
+
+        enriched = signal_system.attach_selection_metadata(result, universe_row)
+
+        self.assertEqual(enriched["선정조건"], "S2-1+S2-2")
+        self.assertEqual(enriched["시가총액(억)"], 500_000.0)
+        self.assertEqual(enriched["거래대금(억)"], 8_000.0)
+
+    def test_realtime_telegram_message_displays_both_condition_label(self):
+        with patch.object(telegram_notifier, "send_telegram_message", return_value=True) as send:
+            telegram_notifier.send_realtime_alert(
+                alert_type="1차 매수선 1% 인접",
+                stock_name="삼성전자",
+                ticker="005930",
+                current_price=80_000,
+                target_price=79_500,
+                distance_pct=0.63,
+                recipients=["me"],
+                system_label="S12",
+                selection_condition="S2-1+S2-2",
+            )
+
+        message = send.call_args.args[0]
+        self.assertIn("선정조건: S2-1·S2-2 모두", message)
 
 
 @unittest.skipUnless(os.name == "nt", "Windows batch behavior test")

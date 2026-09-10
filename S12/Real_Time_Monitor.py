@@ -585,7 +585,8 @@ def check_simplified_alert(
     buy1: float,
     buy2: float,
     buy3: float,
-    history: Dict
+    history: Dict,
+    selection_condition: str = None,
 ) -> bool:
     """
     간단한 알람 조건 체크 및 텔레그램 전송 (Excel 기반)
@@ -652,7 +653,8 @@ def check_simplified_alert(
                     recipients=["all"],
                     sell_prices=sell_prices,
                     system_label=system_label,
-                    low_price=low_price
+                    low_price=low_price,
+                    selection_condition=selection_condition,
                 )
                 
                 # 슬랙 Block Kit 전송 (추가)
@@ -666,7 +668,7 @@ def check_simplified_alert(
                     distance_pct=low_dist_buy1,
                     sell_prices=sell_prices,
                     system_label=system_label,
-                    low_price=low_price
+                    low_price=low_price,
                 )
                 
                 # 알람 전송 기록
@@ -712,7 +714,8 @@ def check_simplified_alert(
                     recipients=["all"],
                     sell_prices=None,
                     system_label=system_label,
-                    low_price=low_price
+                    low_price=low_price,
+                    selection_condition=selection_condition,
                 )
                 
                 # 슬랙 Block Kit 전송 (추가)
@@ -726,7 +729,7 @@ def check_simplified_alert(
                     distance_pct=low_dist_buy1,
                     sell_prices=None,
                     system_label=system_label,
-                    low_price=low_price
+                    low_price=low_price,
                 )
                 
                 # 알람 전송 기록
@@ -763,7 +766,8 @@ def check_simplified_alert(
                     recipients=["all"],
                     sell_prices=sell_prices,
                     system_label=system_label,
-                    low_price=low_price
+                    low_price=low_price,
+                    selection_condition=selection_condition,
                 )
                 
                 # 슬랙 Block Kit 전송
@@ -777,7 +781,7 @@ def check_simplified_alert(
                     distance_pct=low_dist_buy2,
                     sell_prices=sell_prices,
                     system_label=system_label,
-                    low_price=low_price
+                    low_price=low_price,
                 )
                 
                 ticker_alerts[alert_key] = True
@@ -818,7 +822,8 @@ def check_simplified_alert(
                     recipients=["all"],
                     sell_prices=None,
                     system_label=system_label,
-                    low_price=low_price
+                    low_price=low_price,
+                    selection_condition=selection_condition,
                 )
                 
                 from slack_notifier import send_slack_realtime_alert_block_kit
@@ -866,7 +871,8 @@ def check_simplified_alert(
                     recipients=["all"],
                     sell_prices=sell_prices,
                     system_label=system_label,
-                    low_price=low_price
+                    low_price=low_price,
+                    selection_condition=selection_condition,
                 )
                 
                 from slack_notifier import send_slack_realtime_alert_block_kit
@@ -920,7 +926,8 @@ def check_simplified_alert(
                     recipients=["all"],
                     sell_prices=None,
                     system_label=system_label,
-                    low_price=low_price
+                    low_price=low_price,
+                    selection_condition=selection_condition,
                 )
                 
                 from slack_notifier import send_slack_realtime_alert_block_kit
@@ -1086,7 +1093,13 @@ def run_simplified_monitoring_cycle():
             logger.info(f"  [이격도] 1차: {dist1_str}%, 2차: {dist2_str}%, 3차: {dist3_str}%")
             
             # 저가 기준 인접 알림 체크
-            if check_simplified_alert(ticker, stock_name, current_price, low_price, buy_status, buy1, buy2, buy3, alert_history):
+            selection_condition = row.get("선정조건")
+            if pd.isna(selection_condition):
+                selection_condition = None
+            if check_simplified_alert(
+                ticker, stock_name, current_price, low_price, buy_status,
+                buy1, buy2, buy3, alert_history, selection_condition,
+            ):
                 alert_count += 1
         
         logger.info("\n" + "=" * 80)

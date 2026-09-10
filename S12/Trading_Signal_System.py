@@ -1014,6 +1014,15 @@ def move_to_history(df_summary: pd.DataFrame, df_history: pd.DataFrame) -> Tuple
     return df_summary, df_history
 
 
+def attach_selection_metadata(result: dict, universe_row: pd.Series) -> dict:
+    """수집 단계의 선정 근거를 시그널 및 실시간 알림까지 전달한다."""
+    for column in ("선정조건", "시가총액(억)", "거래대금(억)"):
+        value = universe_row.get(column)
+        if value is not None and not pd.isna(value):
+            result[column] = value
+    return result
+
+
 # ==================== 메인 ====================
 def main():
     parser = argparse.ArgumentParser(description="Trading Signal System")
@@ -1024,6 +1033,7 @@ def main():
     parser.add_argument("--alert-threshold", type=float, default=DEFAULT_ALERT_THRESHOLD, help="알람 임계값 (%%)")
     parser.add_argument("--force", action="store_true", help="거래일 체크 무시하고 강제 실행")
     parser.add_argument("--label", type=str, default=None, help="시스템 라벨 (S1/S12). 기본: signal 파일명 자동 감지")
+    parser.add_argument("--no-notify", action="store_true", help="텔레그램/슬랙을 보내지 않고 파일만 갱신")
 
     args = parser.parse_args()
 
@@ -1054,7 +1064,7 @@ def main():
             token = os.getenv("KIWOOM_TOKEN") or get_api_token(args.appkey, args.secret)
         except Exception as e:
             logger.error(f"API 토큰 획득 실패: {e}")
-            if TELEGRAM_AVAILABLE:
+            if TELEGRAM_AVAILABLE and not args.no_notify:
                 send_error_alert(f"API 토큰 획득 실패: {e}", "Trading_Signal_System")
             sys.exit(1)
         
@@ -1110,6 +1120,7 @@ def main():
 
 
             if result:
+                result = attach_selection_metadata(result, row)
                 results.append(result)
                 analyzed_tickers.add(ticker)
         
@@ -1148,7 +1159,7 @@ def main():
             system_label = "S12"
 
         # 9. 슬랙 일일 리포트 전송 (Block Kit 형식) — Telegram 리포트 미사용
-        if SLACK_AVAILABLE:
+        if SLACK_AVAILABLE and not args.no_notify:
             try:
                 send_slack_daily_report(results, len(df_summary), system_label=system_label)
                 logger.info("✓ 슬랙 일일 리포트 전송 완료")
@@ -1164,7 +1175,7 @@ def main():
     
     except Exception as e:
         logger.error(f"예기치 않은 오류 발생: {e}", exc_info=True)
-        if TELEGRAM_AVAILABLE:
+        if TELEGRAM_AVAILABLE and not args.no_notify:
             send_error_alert(f"예기치 않은 오류: {str(e)}", "Trading_Signal_System")
         sys.exit(1)
 

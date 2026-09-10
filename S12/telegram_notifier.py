@@ -169,7 +169,7 @@ def send_realtime_alert(alert_type: str, stock_name: str, ticker: str,
                        current_price: float, target_price: float, 
                        distance_pct: float, recipients: List[str] = None,
                        sell_prices: dict = None, system_label: str = "S2",
-                       low_price: float = None):
+                       low_price: float = None, selection_condition: str = None):
     """
     실시간 알람 전송 (텔레그램 + Slack)
     
@@ -218,6 +218,13 @@ def send_realtime_alert(alert_type: str, stock_name: str, ticker: str,
     message += f"🕐 {now}\n"
     message += f"───────────\n"
     message += f"종목: {stock_name}\n"
+    if selection_condition:
+        display_condition = (
+            "S2-1·S2-2 모두"
+            if selection_condition == "S2-1+S2-2"
+            else selection_condition
+        )
+        message += f"선정조건: {display_condition}\n"
     message += f"현재가: {int(current_price):,}원\n"
     if low_price is not None:
         message += f"저가: {int(low_price):,}원\n"

@@ -12,6 +12,8 @@ import sys
 import argparse
 import logging
 import time
+import tempfile
+import zipfile
 from datetime import datetime, date
 from typing import List, Dict, Tuple, Optional
 
@@ -330,14 +332,24 @@ def calculate_market_cap_eok(listed_shares: int, close_price: float) -> Optional
 def select_stock_condition(
     market_cap_eok: Optional[float], turnover_eok: float, is_bullish: bool
 ) -> Optional[str]:
-    """S2-1/S2-2 중 충족한 조건을 반환한다. 중복 시 S2-2를 우선한다."""
+    """충족한 S2 조건을 반환한다. 두 조건 충족 여부도 별도로 보존한다."""
     if not is_bullish or market_cap_eok is None or turnover_eok is None:
         return None
 
-    if market_cap_eok >= S2_2_MARKET_CAP_EOK and turnover_eok >= S2_2_TURNOVER_EOK:
-        return "S2-2"
-    if market_cap_eok >= S2_1_MARKET_CAP_EOK and turnover_eok >= S2_1_TURNOVER_EOK:
+    matches_s2_1 = (
+        market_cap_eok >= S2_1_MARKET_CAP_EOK
+        and turnover_eok >= S2_1_TURNOVER_EOK
+    )
+    matches_s2_2 = (
+        market_cap_eok >= S2_2_MARKET_CAP_EOK
+        and turnover_eok >= S2_2_TURNOVER_EOK
+    )
+    if matches_s2_1 and matches_s2_2:
+        return "S2-1+S2-2"
+    if matches_s2_1:
         return "S2-1"
+    if matches_s2_2:
+        return "S2-2"
     return None
 
 
@@ -434,11 +446,11 @@ def filter_stocks(data: List[Dict], threshold_eok: float) -> pd.DataFrame:
 def ensure_excel_exists(path: str):
     """엑셀 파일이 없으면 생성"""
     if not os.path.exists(path):
-        wb = Workbook()
-        ws = wb.active
-        ws.title = SHEET_NAME
-        ws.append(["첫주도주", "최근주도주", "티커", "종목명", "거래대금(억)", "누적횟수"])
-        wb.save(path)
+        empty = pd.DataFrame(columns=[
+            "첫주도주", "최근주도주", "티커", "종목명", "시가총액(억)",
+            "거래대금(억)", "선정조건", "누적횟수",
+        ])
+        save_to_excel(path, empty)
         logger.info(f"✓ 새 엑셀 파일 생성: {path}")
 
 
@@ -457,14 +469,11 @@ def read_existing_data(path: str) -> pd.DataFrame:
                 df = pd.read_excel(path, sheet_name=0, dtype={"티커": str})
                 logger.info(f"✓ 첫 번째 시트 읽기 성공 ({len(df)}개 종목)")
             except Exception as e2:
-                logger.error(f"✗ 첫 번째 시트 읽기 실패: {e2}")
-                return pd.DataFrame(columns=["첫주도주", "최근주도주", "티커", "종목명", "거래대금(억)", "누적횟수"])
+                raise RuntimeError(f"기존 누적 엑셀을 읽을 수 없습니다: {path}") from e2
         else:
-            logger.error(f"엑셀 읽기 실패: {e}")
-            return pd.DataFrame(columns=["첫주도주", "최근주도주", "티커", "종목명", "거래대금(억)", "누적횟수"])
+            raise RuntimeError(f"기존 누적 엑셀을 읽을 수 없습니다: {path}") from e
     except Exception as e:
-        logger.error(f"엑셀 읽기 실패: {e}")
-        return pd.DataFrame(columns=["첫주도주", "최근주도주", "티커", "종목명", "거래대금(억)", "누적횟수"])
+        raise RuntimeError(f"기존 누적 엑셀을 읽을 수 없습니다: {path}") from e
     
     if df.empty:
         return df
@@ -483,6 +492,10 @@ def read_existing_data(path: str) -> pd.DataFrame:
     # 누적횟수 열이 없으면 추가
     if "누적횟수" not in df.columns:
         df["누적횟수"] = 1
+    if "시가총액(억)" not in df.columns:
+        df["시가총액(억)"] = pd.NA
+    if "선정조건" not in df.columns:
+        df["선정조건"] = "기존 누적"
     
     # 데이터 정규화
     df["티커"] = df["티커"].apply(normalize_ticker)
@@ -492,7 +505,10 @@ def read_existing_data(path: str) -> pd.DataFrame:
     df = df.dropna(subset=["첫주도주"])
     
     # ⭐ 컬럼 순서 정리 (신버전 표준 순서로)
-    expected_cols = ["첫주도주", "최근주도주", "티커", "종목명", "거래대금(억)", "누적횟수"]
+    expected_cols = [
+        "첫주도주", "최근주도주", "티커", "종목명", "시가총액(억)",
+        "거래대금(억)", "선정조건", "누적횟수",
+    ]
     df = df[expected_cols]
     
     return df
@@ -510,7 +526,7 @@ def get_last_update_date(path: str) -> Optional[date]:
             # 첫 번째 시트 사용
             ws = wb.worksheets[0]
 
-        h1_value = ws["H1"].value
+        h1_value = ws["J1"].value or ws["H1"].value
         
         if h1_value and isinstance(h1_value, str):
             # "최종 업데이트: 2025-10-12" 형태에서 날짜 추출
@@ -536,7 +552,10 @@ def save_to_excel(path: str, df: pd.DataFrame, update_date: str = None):
     ws.title = SHEET_NAME
 
     # 헤더 작성
-    headers = ["첫주도주", "최근주도주", "티커", "종목명", "거래대금(억)", "누적횟수"]
+    headers = [
+        "첫주도주", "최근주도주", "티커", "종목명", "시가총액(억)",
+        "거래대금(억)", "선정조건", "누적횟수",
+    ]
     for col_idx, header in enumerate(headers, start=1):
         ws.cell(1, col_idx, header)
 
@@ -546,14 +565,35 @@ def save_to_excel(path: str, df: pd.DataFrame, update_date: str = None):
         ws.cell(idx + 2, 2, row["최근주도주"])  # date 객체 그대로 저장
         ws.cell(idx + 2, 3, row["티커"])
         ws.cell(idx + 2, 4, row["종목명"])
-        ws.cell(idx + 2, 5, row["거래대금(억)"])
-        ws.cell(idx + 2, 6, row["누적횟수"])
+        ws.cell(idx + 2, 5, row["시가총액(억)"])
+        ws.cell(idx + 2, 6, row["거래대금(억)"])
+        ws.cell(idx + 2, 7, row["선정조건"])
+        ws.cell(idx + 2, 8, row["누적횟수"])
 
     # 서식 적용 (워크시트 객체 전달)
     apply_formatting_to_ws(ws, update_date)
 
-    # 파일 저장
-    wb.save(path)
+    # 같은 폴더의 임시 파일에 먼저 저장·검증한 뒤 교체한다.
+    target = os.path.abspath(path)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix=".turnover_universe-", suffix=".xlsx", dir=os.path.dirname(target))
+    os.close(fd)
+    try:
+        wb.save(temp_path)
+        with zipfile.ZipFile(temp_path) as archive:
+            bad_member = archive.testzip()
+            if bad_member:
+                raise RuntimeError(f"저장 검증 실패: {bad_member}")
+        checked = load_workbook(temp_path, read_only=True)
+        try:
+            if SHEET_NAME not in checked.sheetnames:
+                raise RuntimeError(f"저장 검증 실패: '{SHEET_NAME}' 시트 없음")
+        finally:
+            checked.close()
+        os.replace(temp_path, target)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 
 def apply_formatting_to_ws(ws, update_date: str = None):
@@ -565,7 +605,7 @@ def apply_formatting_to_ws(ws, update_date: str = None):
         from openpyxl.utils import get_column_letter
 
         # 각 컬럼의 최대 길이를 계산하여 너비 자동 설정
-        for col_idx in range(1, 7):  # A~F열
+        for col_idx in range(1, 9):  # A~H열
             col_letter = get_column_letter(col_idx)
             max_length = 0
 
@@ -595,7 +635,7 @@ def apply_formatting_to_ws(ws, update_date: str = None):
         )
 
         # ⭐ 헤더 행 서식 (테두리 + 중앙정렬)
-        for col_idx in range(1, 7):  # A~F열 헤더
+        for col_idx in range(1, 9):  # A~H열 헤더
             cell = ws.cell(row=1, column=col_idx)
             if cell.value:
                 cell.border = thin_border
@@ -603,7 +643,7 @@ def apply_formatting_to_ws(ws, update_date: str = None):
 
         # ⭐ 데이터 행 서식 (값이 있는 셀만 테두리 적용)
         for row_idx in range(2, ws.max_row + 1):
-            for col_idx in range(1, 7):
+            for col_idx in range(1, 9):
                 cell = ws.cell(row=row_idx, column=col_idx)
 
                 # 값이 있는 셀만 처리
@@ -624,28 +664,28 @@ def apply_formatting_to_ws(ws, update_date: str = None):
                     elif col_idx == 4:
                         cell.alignment = Alignment(horizontal="center", vertical="center")
 
-                    # E열(거래대금): 천단위 콤마 + 오른쪽 정렬
-                    elif col_idx == 5:
+                    # E,F열(시가총액/거래대금): 천단위 콤마 + 오른쪽 정렬
+                    elif col_idx in [5, 6]:
                         cell.number_format = '#,##0.00'
                         cell.alignment = Alignment(horizontal="right", vertical="center")
 
-                    # F열(누적횟수): 정수 + 오른쪽 정렬
-                    elif col_idx == 6:
+                    # H열(누적횟수): 정수 + 오른쪽 정렬
+                    elif col_idx == 8:
                         cell.number_format = '0'
                         cell.alignment = Alignment(horizontal="right", vertical="center")
 
-        # ⭐ H1 셀에 업데이트 날짜 기록 (테두리 없음, 왼쪽 정렬)
+        # J1은 데이터 헤더와 겹치지 않는 업데이트 메타데이터 셀이다.
         if update_date:
-            ws["H1"] = f"최종 업데이트: {update_date}"
-            ws["H1"].font = Font(bold=True, size=10)
-            ws["H1"].alignment = Alignment(horizontal="left", vertical="center")
-            ws["H1"].border = None  # 테두리 없음
+            ws["J1"] = f"최종 업데이트: {update_date}"
+            ws["J1"].font = Font(bold=True, size=10)
+            ws["J1"].alignment = Alignment(horizontal="left", vertical="center")
+            ws["J1"].border = None
 
     except Exception as e:
         logger.warning(f"서식 적용 실패: {e}")
 
 
-def append_to_excel(path: str, new_rows: List[Tuple[date, str, str, float]]):
+def append_to_excel(path: str, new_rows: List[Tuple[date, str, str, float, float, str]]):
     """새 데이터를 엑셀에 추가 (종목별 1행 유지 + 누적횟수 카운트)"""
     if not new_rows:
         logger.info("저장할 데이터가 없습니다.")
@@ -661,7 +701,10 @@ def append_to_excel(path: str, new_rows: List[Tuple[date, str, str, float]]):
     df_old = read_existing_data(path)
     
     # 새 데이터 생성 (API에서 받은 거래일)
-    df_new = pd.DataFrame(new_rows, columns=["거래일", "티커", "종목명", "거래대금(억)"])
+    df_new = pd.DataFrame(
+        new_rows,
+        columns=["거래일", "티커", "종목명", "시가총액(억)", "거래대금(억)", "선정조건"],
+    )
     df_new["티커"] = df_new["티커"].apply(normalize_ticker)
     trading_date = pd.to_datetime(df_new["거래일"]).dt.date.iloc[0]  # API가 준 거래일
     
@@ -700,7 +743,9 @@ def append_to_excel(path: str, new_rows: List[Tuple[date, str, str, float]]):
             # 첫주도주: 유지 (변경 안 함)
             # 최근주도주: 항상 최신 거래일로 갱신
             df_old.loc[mask, "최근주도주"] = row["최근주도주"]
+            df_old.loc[mask, "시가총액(억)"] = row["시가총액(억)"]
             df_old.loc[mask, "거래대금(억)"] = row["거래대금(억)"]
+            df_old.loc[mask, "선정조건"] = row["선정조건"]
         
         # 기존 데이터 + 신규 종목만 합치기
         df_all = pd.concat([df_old, df_really_new], ignore_index=True)
@@ -853,7 +898,10 @@ def collect_today_data(token: str, threshold_eok: float, excel_path: str, filter
     
     # 엑셀에 저장
     rows_to_save = [
-        (today, row["ticker"], row["name"], row["turnover_eok"])
+        (
+            today, row["ticker"], row["name"], row["market_cap_eok"],
+            row["turnover_eok"], row["selection_condition"],
+        )
         for _, row in df_filtered.iterrows()
     ]
     
