@@ -47,6 +47,13 @@ API_STOCK_INFO_ID = "ka10099"  # 상장주식수 조회
 
 EXCEL_PATH = "output/turnover_universe.xlsx"
 SHEET_NAME = "universe"
+S2_1_ACHIEVED_COLUMN = "S2-1 최초달성일"
+S2_2_ACHIEVED_COLUMN = "S2-2 최초달성일"
+EXCEL_COLUMNS = [
+    "첫주도주", "최근주도주", "티커", "종목명", "시가총액(억)",
+    "거래대금(억)", S2_1_ACHIEVED_COLUMN, S2_2_ACHIEVED_COLUMN,
+    "선정조건", "누적횟수",
+]
 
 MIN_TURNOVER_EOK = 3000.0  # S2-2 후보까지 포함하는 사전 필터
 S2_1_MARKET_CAP_EOK = 50000.0  # 5조원
@@ -446,10 +453,7 @@ def filter_stocks(data: List[Dict], threshold_eok: float) -> pd.DataFrame:
 def ensure_excel_exists(path: str):
     """엑셀 파일이 없으면 생성"""
     if not os.path.exists(path):
-        empty = pd.DataFrame(columns=[
-            "첫주도주", "최근주도주", "티커", "종목명", "시가총액(억)",
-            "거래대금(억)", "선정조건", "누적횟수",
-        ])
+        empty = pd.DataFrame(columns=EXCEL_COLUMNS)
         save_to_excel(path, empty)
         logger.info(f"✓ 새 엑셀 파일 생성: {path}")
 
@@ -496,20 +500,30 @@ def read_existing_data(path: str) -> pd.DataFrame:
         df["시가총액(억)"] = pd.NA
     if "선정조건" not in df.columns:
         df["선정조건"] = "기존 누적"
+    for tier, column in (
+        ("S2-1", S2_1_ACHIEVED_COLUMN),
+        ("S2-2", S2_2_ACHIEVED_COLUMN),
+    ):
+        if column not in df.columns:
+            df[column] = pd.NaT
+            matched = df["선정조건"].fillna("").astype(str).str.contains(tier, regex=False)
+            df.loc[matched, column] = df.loc[matched, "최근주도주"]
     
     # 데이터 정규화
     df["티커"] = df["티커"].apply(normalize_ticker)
     df["첫주도주"] = pd.to_datetime(df["첫주도주"], errors="coerce").dt.date
     df["최근주도주"] = pd.to_datetime(df["최근주도주"], errors="coerce").dt.date
+    df[S2_1_ACHIEVED_COLUMN] = pd.to_datetime(
+        df[S2_1_ACHIEVED_COLUMN], errors="coerce"
+    ).dt.date
+    df[S2_2_ACHIEVED_COLUMN] = pd.to_datetime(
+        df[S2_2_ACHIEVED_COLUMN], errors="coerce"
+    ).dt.date
     df["누적횟수"] = df["누적횟수"].fillna(1).astype(int)
     df = df.dropna(subset=["첫주도주"])
     
     # ⭐ 컬럼 순서 정리 (신버전 표준 순서로)
-    expected_cols = [
-        "첫주도주", "최근주도주", "티커", "종목명", "시가총액(억)",
-        "거래대금(억)", "선정조건", "누적횟수",
-    ]
-    df = df[expected_cols]
+    df = df[EXCEL_COLUMNS]
     
     return df
 
@@ -526,7 +540,7 @@ def get_last_update_date(path: str) -> Optional[date]:
             # 첫 번째 시트 사용
             ws = wb.worksheets[0]
 
-        h1_value = ws["J1"].value or ws["H1"].value
+        h1_value = ws["L1"].value or ws["J1"].value or ws["H1"].value
         
         if h1_value and isinstance(h1_value, str):
             # "최종 업데이트: 2025-10-12" 형태에서 날짜 추출
@@ -555,11 +569,7 @@ def save_to_excel(path: str, df: pd.DataFrame, update_date: str = None):
     ws.title = SHEET_NAME
 
     # 헤더 작성
-    headers = [
-        "첫주도주", "최근주도주", "티커", "종목명", "시가총액(억)",
-        "거래대금(억)", "선정조건", "누적횟수",
-    ]
-    for col_idx, header in enumerate(headers, start=1):
+    for col_idx, header in enumerate(EXCEL_COLUMNS, start=1):
         ws.cell(1, col_idx, header)
 
     # 데이터 작성
@@ -570,8 +580,10 @@ def save_to_excel(path: str, df: pd.DataFrame, update_date: str = None):
         ws.cell(idx + 2, 4, row["종목명"])
         ws.cell(idx + 2, 5, excel_value(row["시가총액(억)"]))
         ws.cell(idx + 2, 6, row["거래대금(억)"])
-        ws.cell(idx + 2, 7, row["선정조건"])
-        ws.cell(idx + 2, 8, row["누적횟수"])
+        ws.cell(idx + 2, 7, excel_value(row[S2_1_ACHIEVED_COLUMN]))
+        ws.cell(idx + 2, 8, excel_value(row[S2_2_ACHIEVED_COLUMN]))
+        ws.cell(idx + 2, 9, row["선정조건"])
+        ws.cell(idx + 2, 10, row["누적횟수"])
 
     # 서식 적용 (워크시트 객체 전달)
     apply_formatting_to_ws(ws, update_date)
@@ -608,7 +620,7 @@ def apply_formatting_to_ws(ws, update_date: str = None):
         from openpyxl.utils import get_column_letter
 
         # 각 컬럼의 최대 길이를 계산하여 너비 자동 설정
-        for col_idx in range(1, 9):  # A~H열
+        for col_idx in range(1, len(EXCEL_COLUMNS) + 1):
             col_letter = get_column_letter(col_idx)
             max_length = 0
 
@@ -638,7 +650,7 @@ def apply_formatting_to_ws(ws, update_date: str = None):
         )
 
         # ⭐ 헤더 행 서식 (테두리 + 중앙정렬)
-        for col_idx in range(1, 9):  # A~H열 헤더
+        for col_idx in range(1, len(EXCEL_COLUMNS) + 1):
             cell = ws.cell(row=1, column=col_idx)
             if cell.value:
                 cell.border = thin_border
@@ -646,15 +658,15 @@ def apply_formatting_to_ws(ws, update_date: str = None):
 
         # ⭐ 데이터 행 서식 (값이 있는 셀만 테두리 적용)
         for row_idx in range(2, ws.max_row + 1):
-            for col_idx in range(1, 9):
+            for col_idx in range(1, len(EXCEL_COLUMNS) + 1):
                 cell = ws.cell(row=row_idx, column=col_idx)
 
                 # 값이 있는 셀만 처리
                 if cell.value not in (None, ""):
                     cell.border = thin_border
 
-                    # A,B열(날짜): 날짜 포맷 + 중앙정렬 (⭐ 시간 제거, 날짜만 표시)
-                    if col_idx in [1, 2]:
+                    # A,B,G,H열: 날짜 포맷 + 중앙정렬
+                    if col_idx in [1, 2, 7, 8]:
                         cell.number_format = 'yyyy-mm-dd'
                         cell.alignment = Alignment(horizontal="center", vertical="center")
 
@@ -672,17 +684,17 @@ def apply_formatting_to_ws(ws, update_date: str = None):
                         cell.number_format = '#,##0.00'
                         cell.alignment = Alignment(horizontal="right", vertical="center")
 
-                    # H열(누적횟수): 정수 + 오른쪽 정렬
-                    elif col_idx == 8:
+                    # J열(누적횟수): 정수 + 오른쪽 정렬
+                    elif col_idx == 10:
                         cell.number_format = '0'
                         cell.alignment = Alignment(horizontal="right", vertical="center")
 
-        # J1은 데이터 헤더와 겹치지 않는 업데이트 메타데이터 셀이다.
+        # L1은 데이터 헤더와 겹치지 않는 업데이트 메타데이터 셀이다.
         if update_date:
-            ws["J1"] = f"최종 업데이트: {update_date}"
-            ws["J1"].font = Font(bold=True, size=10)
-            ws["J1"].alignment = Alignment(horizontal="left", vertical="center")
-            ws["J1"].border = None
+            ws["L1"] = f"최종 업데이트: {update_date}"
+            ws["L1"].font = Font(bold=True, size=10)
+            ws["L1"].alignment = Alignment(horizontal="left", vertical="center")
+            ws["L1"].border = None
 
     except Exception as e:
         logger.warning(f"서식 적용 실패: {e}")
@@ -709,11 +721,16 @@ def append_to_excel(path: str, new_rows: List[Tuple[date, str, str, float, float
         columns=["거래일", "티커", "종목명", "시가총액(억)", "거래대금(억)", "선정조건"],
     )
     df_new["티커"] = df_new["티커"].apply(normalize_ticker)
-    trading_date = pd.to_datetime(df_new["거래일"]).dt.date.iloc[0]  # API가 준 거래일
-    
+    df_new["거래일"] = pd.to_datetime(df_new["거래일"]).dt.date
     # 신규 종목용: 첫주도주 = 최근주도주 = 거래일
-    df_new["첫주도주"] = trading_date
-    df_new["최근주도주"] = trading_date
+    df_new["첫주도주"] = df_new["거래일"]
+    df_new["최근주도주"] = df_new["거래일"]
+    df_new[S2_1_ACHIEVED_COLUMN] = df_new["거래일"].where(
+        df_new["선정조건"].str.contains("S2-1", regex=False), pd.NaT
+    )
+    df_new[S2_2_ACHIEVED_COLUMN] = df_new["거래일"].where(
+        df_new["선정조건"].str.contains("S2-2", regex=False), pd.NaT
+    )
     df_new["누적횟수"] = 1
     df_new = df_new.drop(columns=["거래일"])  # 임시 컬럼 제거
     
@@ -749,9 +766,16 @@ def append_to_excel(path: str, new_rows: List[Tuple[date, str, str, float, float
             df_old.loc[mask, "시가총액(억)"] = row["시가총액(억)"]
             df_old.loc[mask, "거래대금(억)"] = row["거래대금(억)"]
             df_old.loc[mask, "선정조건"] = row["선정조건"]
+            for column in (S2_1_ACHIEVED_COLUMN, S2_2_ACHIEVED_COLUMN):
+                if df_old.loc[mask, column].isna().all() and pd.notna(row[column]):
+                    df_old.loc[mask, column] = pd.Timestamp(row[column])
         
         # 기존 데이터 + 신규 종목만 합치기
-        df_all = pd.concat([df_old, df_really_new], ignore_index=True)
+        df_all = (
+            df_old.reset_index(drop=True)
+            if df_really_new.empty
+            else pd.concat([df_old, df_really_new], ignore_index=True)
+        )
         
         new_count = len(df_really_new)
         updated_count = len(df_existing_update)

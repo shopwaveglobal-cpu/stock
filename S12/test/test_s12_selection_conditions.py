@@ -94,6 +94,28 @@ class SelectionConditionTests(unittest.TestCase):
             self.assertEqual(existing["거래대금(억)"], 4_000.0)
             self.assertEqual(existing["시가총액(억)"], 110_000.0)
             self.assertEqual(existing["선정조건"], "S2-2")
+            self.assertEqual(existing["S2-1 최초달성일"].date(), today)
+            self.assertEqual(existing["S2-2 최초달성일"].date(), today)
+
+    def test_each_tier_keeps_its_first_achievement_date(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workbook = Path(temp_dir) / "turnover_universe.xlsx"
+            s2_1_date = date(2026, 9, 9)
+            s2_2_date = date(2026, 9, 10)
+
+            append_to_excel(
+                workbook,
+                [(s2_1_date, "005930", "A", 60_000.0, 6_000.0, "S2-1")],
+            )
+            append_to_excel(
+                workbook,
+                [(s2_2_date, "005930", "A", 110_000.0, 4_000.0, "S2-2")],
+            )
+
+            saved = pd.read_excel(workbook, sheet_name="universe", dtype={"티커": str})
+            row = saved.iloc[0]
+            self.assertEqual(row["S2-1 최초달성일"].date(), s2_1_date)
+            self.assertEqual(row["S2-2 최초달성일"].date(), s2_2_date)
 
     def test_corrupt_existing_workbook_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -132,6 +154,8 @@ class SelectionConditionTests(unittest.TestCase):
                         "종목명": "A",
                         "시가총액(억)": pd.NA,
                         "거래대금(억)": 5_000.0,
+                        "S2-1 최초달성일": pd.NaT,
+                        "S2-2 최초달성일": pd.NaT,
                         "선정조건": "기존 누적",
                         "누적횟수": 1,
                     }
@@ -142,6 +166,7 @@ class SelectionConditionTests(unittest.TestCase):
 
             saved = pd.read_excel(workbook, sheet_name="universe", dtype={"티커": str})
             self.assertTrue(pd.isna(saved.loc[0, "시가총액(억)"]))
+            self.assertEqual(saved.loc[0, "누적횟수"], 1)
 
     def test_collection_flow_applies_both_tiers_and_rejects_non_matches(self):
         rank_response = {
