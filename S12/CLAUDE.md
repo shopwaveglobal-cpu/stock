@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## System Overview
 
-**S12 Trading System** is an automated Korean stock trading signal system based on 20-day moving average envelopes. It tracks high-volume stocks (5000억+ daily turnover), generates buy/sell signals with 3-level split entry/exit strategies, and sends real-time alerts via Telegram.
+**S12 Trading System** is an automated Korean stock trading signal system based on 20-day moving average envelopes. It tracks bullish stocks that satisfy either S2-1 (5조+ market cap and 5000억+ turnover) or S2-2 (10조+ market cap and 3000억+ turnover), generates buy/sell signals with 3-level split entry/exit strategies, and sends real-time alerts.
 
 ### Core Architecture
 
@@ -17,7 +17,7 @@ Daily_Turnover_Tracker.py → turnover_universe.xlsx
 ```
 
 **Data Flow:**
-1. **Daily collection** (20:10): Track high-turnover stocks → Generate signals → Send Telegram report
+1. **Daily collection** (20:10): Apply S2-1/S2-2 market-cap, turnover, and bullish-candle conditions → Generate signals → Send report
 2. **Real-time monitoring** (08:00-20:00): Monitor Summary tab stocks → Alert on buy/sell opportunities
 
 ### Trading Strategy
@@ -90,7 +90,7 @@ python test_cloud_function.py
 
 ### Core Python Scripts
 
-- **Daily_Turnover_Tracker.py**: Fetches daily turnover rankings from Kiwoom API, filters stocks with 5000억+ turnover, excludes ETF/ETN, accumulates results in `turnover_universe.xlsx`
+- **Daily_Turnover_Tracker.py**: Fetches turnover rankings and listed-share counts from Kiwoom, calculates close-based market cap, applies S2-1/S2-2 plus bullish-candle conditions, excludes ETF/ETN, and accumulates results in `turnover_universe.xlsx`
 - **Trading_Signal_System.py**: Analyzes stocks from universe file, calculates 20-day MA envelopes, generates 3-level buy/sell signals, sends daily Telegram report at 20:10
 - **Real_Time_Monitor.py**: Monitors Summary tab stocks during trading hours (08:00-20:00), sends proximity alerts (5% threshold), one alert per status per day to prevent spam
 - **monitor_dashboard.py**: Interactive dashboard for monitoring and controlling all real-time programs, shows process status, log activity, supports one-click start/stop
@@ -108,7 +108,7 @@ python test_cloud_function.py
 
 ### Data Files (output/)
 
-- **turnover_universe.xlsx**: Accumulated high-turnover stock universe (persistent history)
+- **turnover_universe.xlsx**: Accumulated S2-1/S2-2 stock universe (persistent history)
 - **trading_signals.xlsx**: Current analysis results with two tabs:
   - **Summary**: Active monitoring stocks
   - **History**: Completed trades with realized returns

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Daily Turnover Tracker - 매일 거래대금 5000억+ 종목 추적
+Daily Turnover Tracker - 시가총액·거래대금 조건 종목 추적
 - 매일 1회 실행하여 오늘의 거래대금 순위 수집
-- 5000억 이상 종목만 엑셀에 축적
-- (날짜, 티커) 중복 자동 제거
+- S2-1 또는 S2-2 조건을 만족한 양봉 종목을 엑셀에 축적
+- 기존 종목의 누적 방식과 종목당 1행 구조 유지
 """
 
 import os
@@ -40,12 +40,19 @@ API_RANK_ENDPOINT = "/api/dostk/rkinfo"
 API_RANK_ID = "ka10032"
 API_CHART_ENDPOINT = "/api/dostk/chart"  # 양봉 필터용
 API_CHART_ID = "ka10081"  # 양봉 필터용
+API_STOCK_INFO_ENDPOINT = "/api/dostk/stkinfo"
+API_STOCK_INFO_ID = "ka10099"  # 상장주식수 조회
 
 EXCEL_PATH = "output/turnover_universe.xlsx"
 SHEET_NAME = "universe"
 
-THRESHOLD_EOK = 5000.0  # 5000억
+MIN_TURNOVER_EOK = 3000.0  # S2-2 후보까지 포함하는 사전 필터
+S2_1_MARKET_CAP_EOK = 50000.0  # 5조원
+S2_1_TURNOVER_EOK = 5000.0
+S2_2_MARKET_CAP_EOK = 100000.0  # 10조원
+S2_2_TURNOVER_EOK = 3000.0
 MARKETS = ["001", "101"]  # KRX, KOSDAQ
+STOCK_INFO_MARKETS = ["0", "10"]  # 종목정보 API: 코스피, 코스닥
 
 # ETF/ETN 제외 키워드
 EXCLUDE_KEYWORDS = [
@@ -134,6 +141,44 @@ def fetch_rank_data(token: str, market: str, max_retry: int = 5) -> dict:
             time.sleep(0.5 * (2 ** attempt))
     
     raise RuntimeError("최대 재시도 횟수 초과")
+
+
+def fetch_stock_list(token: str, market: str, max_retry: int = 5) -> dict:
+    """종목정보 리스트에서 상장주식수를 조회한다."""
+    headers = {
+        "authorization": f"Bearer {token}",
+        "Content-Type": "application/json;charset=UTF-8",
+        "api-id": API_STOCK_INFO_ID,
+        "cont-yn": "N",
+        "next-key": "",
+    }
+    body = {"mrkt_tp": market}
+    url = API_BASE_URL + API_STOCK_INFO_ENDPOINT
+
+    for attempt in range(max_retry):
+        try:
+            response = requests.post(url, headers=headers, json=body, timeout=20)
+
+            if response.status_code == 429:
+                retry_after = response.headers.get("Retry-After", 1)
+                sleep_time = float(retry_after) if str(retry_after).isdigit() else (0.5 * (2 ** attempt))
+                logger.warning(f"Rate limit - {sleep_time:.1f}초 대기 중...")
+                time.sleep(sleep_time)
+                continue
+
+            if 500 <= response.status_code < 600:
+                logger.warning(f"서버 오류 {response.status_code} - 재시도 {attempt + 1}/{max_retry}")
+                time.sleep(0.5 * (2 ** attempt))
+                continue
+
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException:
+            if attempt == max_retry - 1:
+                raise
+            time.sleep(0.5 * (2 ** attempt))
+
+    raise RuntimeError("종목정보 최대 재시도 횟수 초과")
 
 
 def fetch_today_candle(token: str, ticker: str, max_retry: int = 3) -> Optional[Dict[str, float]]:
@@ -252,6 +297,62 @@ def is_excluded(name: str) -> bool:
     
     name_upper = str(name).upper()
     return any(keyword.upper() in name_upper for keyword in EXCLUDE_KEYWORDS)
+
+
+def parse_listed_share_counts(response: dict) -> Dict[str, int]:
+    """종목정보 응답을 티커별 상장주식수 사전으로 변환한다."""
+    data_list = response.get("list", [])
+    if not isinstance(data_list, list):
+        return {}
+
+    share_counts = {}
+    for item in data_list:
+        ticker = normalize_ticker(item.get("code") or item.get("stk_cd"))
+        raw_count = item.get("listCount") or item.get("list_count")
+        try:
+            listed_shares = int(str(raw_count).replace(",", ""))
+        except (TypeError, ValueError):
+            continue
+
+        if ticker and listed_shares > 0:
+            share_counts[ticker] = max(share_counts.get(ticker, 0), listed_shares)
+
+    return share_counts
+
+
+def calculate_market_cap_eok(listed_shares: int, close_price: float) -> Optional[float]:
+    """상장주식수와 당일 종가로 시가총액(억원)을 계산한다."""
+    if not listed_shares or not close_price or listed_shares <= 0 or close_price <= 0:
+        return None
+    return (listed_shares * close_price) / 100_000_000
+
+
+def select_stock_condition(
+    market_cap_eok: Optional[float], turnover_eok: float, is_bullish: bool
+) -> Optional[str]:
+    """S2-1/S2-2 중 충족한 조건을 반환한다. 중복 시 S2-2를 우선한다."""
+    if not is_bullish or market_cap_eok is None or turnover_eok is None:
+        return None
+
+    if market_cap_eok >= S2_2_MARKET_CAP_EOK and turnover_eok >= S2_2_TURNOVER_EOK:
+        return "S2-2"
+    if market_cap_eok >= S2_1_MARKET_CAP_EOK and turnover_eok >= S2_1_TURNOVER_EOK:
+        return "S2-1"
+    return None
+
+
+def fetch_listed_share_counts(token: str) -> Dict[str, int]:
+    """코스피·코스닥 상장주식수를 한 번씩 조회해 합친다."""
+    share_counts = {}
+    for market in STOCK_INFO_MARKETS:
+        market_name = "코스피" if market == "0" else "코스닥"
+        try:
+            parsed = parse_listed_share_counts(fetch_stock_list(token, market))
+            share_counts.update(parsed)
+            logger.info(f"[{market_name}] 상장주식수 {len(parsed)}개 수신")
+        except Exception as e:
+            logger.error(f"[{market_name}] 상장주식수 조회 실패: {e}")
+    return share_counts
 
 
 def parse_rank_response(response: dict) -> List[Dict]:
@@ -649,11 +750,20 @@ def append_to_excel(path: str, new_rows: List[Tuple[date, str, str, float]]):
 def collect_today_data(token: str, threshold_eok: float, excel_path: str, filter_bullish: bool = False) -> int:
     """오늘의 거래대금 데이터 수집 및 저장"""
     today = date.today()
+    if threshold_eok != MIN_TURNOVER_EOK:
+        logger.warning(
+            f"--threshold={threshold_eok:,.0f}은 더 이상 수집조건을 변경하지 않습니다. "
+            f"S2-2 후보 확인을 위해 {MIN_TURNOVER_EOK:,.0f}억을 사용합니다."
+        )
+    if not filter_bullish:
+        logger.warning("양봉 필터 비활성화 요청은 새 S2-1/S2-2 조건에서 무시됩니다.")
+
     logger.info(f"{'='*60}")
     logger.info(f"날짜: {today}")
-    logger.info(f"임계값: {threshold_eok:,.0f}억 이상")
-    if filter_bullish:
-        logger.info(f"필터: 양봉 종목만 (시가 < 종가)")
+    logger.info(f"거래대금 사전 필터: {MIN_TURNOVER_EOK:,.0f}억 이상")
+    logger.info("수집조건 S2-1: 시총 5조 이상 + 거래대금 5,000억 이상 + 양봉")
+    logger.info("수집조건 S2-2: 시총 10조 이상 + 거래대금 3,000억 이상 + 양봉")
+    logger.info("필터: 양봉 종목만 (시가 < 종가)")
     logger.info(f"{'='*60}")
     
     # 모든 마켓 데이터 수집
@@ -676,44 +786,70 @@ def collect_today_data(token: str, threshold_eok: float, excel_path: str, filter
         return 0
     
     # 필터링
-    df_filtered = filter_stocks(all_data, threshold_eok)
+    df_filtered = filter_stocks(all_data, MIN_TURNOVER_EOK)
 
     if df_filtered.empty:
-        logger.warning(f"{threshold_eok:,.0f}억 이상 종목이 없습니다.")
+        logger.warning(f"{MIN_TURNOVER_EOK:,.0f}억 이상 후보 종목이 없습니다.")
         return 0
 
-    # 양봉 필터 적용 (선택적)
-    if filter_bullish:
-        logger.info(f"\n양봉 필터링 진행 중... (총 {len(df_filtered)}개 종목)")
-        bullish_stocks = []
+    listed_share_counts = fetch_listed_share_counts(token)
+    if not listed_share_counts:
+        logger.warning("상장주식수 데이터가 없어 종목 수집을 건너뜁니다.")
+        return 0
 
-        for idx, row in df_filtered.iterrows():
-            ticker = row['ticker']
-            name = row['name']
+    logger.info(f"\n시총·거래대금·양봉 조건 판정 중... (후보 {len(df_filtered)}개)")
+    selected_rows = []
+    for _, row in df_filtered.iterrows():
+        ticker = row["ticker"]
+        name = row["name"]
+        candle = fetch_today_candle(token, ticker)
 
-            if is_bullish_candle(token, ticker):
-                bullish_stocks.append(idx)
-                logger.info(f"  ✓ {name} ({ticker}): 양봉")
-            else:
-                logger.info(f"  ✗ {name} ({ticker}): 음봉 또는 조회 실패")
+        if candle is None:
+            logger.info(f"  ✗ {name} ({ticker}): 캔들 조회 실패")
+            continue
 
-        # 양봉 종목만 남기기
-        df_filtered = df_filtered.loc[bullish_stocks]
+        is_bullish = candle["open"] < candle["close"]
+        market_cap_eok = calculate_market_cap_eok(
+            listed_share_counts.get(ticker), candle["close"]
+        )
+        condition = select_stock_condition(
+            market_cap_eok, row["turnover_eok"], is_bullish
+        )
 
-        if df_filtered.empty:
-            logger.warning("양봉 종목이 없습니다.")
-            return 0
+        if condition:
+            selected_row = row.to_dict()
+            selected_row["market_cap_eok"] = market_cap_eok
+            selected_row["selection_condition"] = condition
+            selected_rows.append(selected_row)
+            logger.info(
+                f"  ✓ {name} ({ticker}): {condition}, "
+                f"시총 {market_cap_eok:,.0f}억, 거래대금 {row['turnover_eok']:,.0f}억"
+            )
+        else:
+            market_cap_text = f"{market_cap_eok:,.0f}억" if market_cap_eok else "조회 실패"
+            candle_text = "양봉" if is_bullish else "비양봉"
+            logger.info(
+                f"  ✗ {name} ({ticker}): 시총 {market_cap_text}, "
+                f"거래대금 {row['turnover_eok']:,.0f}억, {candle_text}"
+            )
+
+    df_filtered = pd.DataFrame(selected_rows)
+    if df_filtered.empty:
+        logger.warning("S2-1/S2-2 조건을 만족한 종목이 없습니다.")
+        return 0
 
     # 결과 출력
     logger.info(f"\n{'='*60}")
-    logger.info(f"거래대금 {threshold_eok:,.0f}억 이상: {len(df_filtered)}개 종목")
-    if filter_bullish:
-        logger.info(f"(양봉 필터 적용됨)")
+    logger.info(f"S2-1/S2-2 조건 통과: {len(df_filtered)}개 종목")
     logger.info(f"{'='*60}")
     
     logger.info("\n상위 10개:")
     for idx, row in df_filtered.head(10).iterrows():
-        logger.info(f"  {idx+1:2d}. {row['ticker']} {row['name']:20s} {row['turnover_eok']:>10,.0f}억")
+        logger.info(
+            f"  {idx+1:2d}. {row['ticker']} {row['name']:20s} "
+            f"시총 {row['market_cap_eok']:>10,.0f}억 / "
+            f"거래대금 {row['turnover_eok']:>8,.0f}억 / {row['selection_condition']}"
+        )
     
     # 엑셀에 저장
     rows_to_save = [
@@ -729,13 +865,13 @@ def collect_today_data(token: str, threshold_eok: float, excel_path: str, filter
 # ==================== 엔트리 포인트 ====================
 def main():
     parser = argparse.ArgumentParser(
-        description="매일 거래대금 5000억+ 종목 추적 스크립트"
+        description="매일 시가총액·거래대금·양봉 조건 종목 추적 스크립트"
     )
     parser.add_argument(
         "--threshold", 
         type=float, 
-        default=THRESHOLD_EOK,
-        help=f"거래대금 임계값 (억원, 기본값: {THRESHOLD_EOK:,.0f})"
+        default=MIN_TURNOVER_EOK,
+        help="호환성 유지용 옵션 (새 S2-1/S2-2 조건에서는 값이 무시됨)"
     )
     parser.add_argument(
         "--out", 
@@ -765,7 +901,7 @@ def main():
     parser.add_argument(
         "--no-filter-bullish",
         action="store_true",
-        help="양봉 필터 비활성화 (기본값: 양봉 필터 활성화)"
+        help="호환성 유지용 옵션 (새 S2-1/S2-2 조건에서는 양봉 필터가 항상 적용됨)"
     )
 
     args = parser.parse_args()
@@ -796,9 +932,8 @@ def main():
         # 토큰 획득 (환경변수로 전달된 경우 재발급 생략)
         token = os.getenv("KIWOOM_TOKEN") or get_access_token(appkey, secret)
 
-        # 데이터 수집 및 저장 (기본값: 양봉 필터 활성화)
-        filter_bullish = not args.no_filter_bullish
-        count = collect_today_data(token, args.threshold, excel_path, filter_bullish=filter_bullish)
+        # 새 조건에서는 거래대금 경계와 양봉 여부가 고정된다.
+        count = collect_today_data(token, args.threshold, excel_path, filter_bullish=True)
 
         logger.info(f"\n{'='*60}")
         logger.info(f"완료: {count}개 종목 저장됨")

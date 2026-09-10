@@ -1,6 +1,6 @@
-# S12 — 수동 큐레이션 기반 실시간 매수선 모니터링 시스템
+# S12 — 시가총액·거래대금 기반 실시간 매수선 모니터링 시스템
 
-직접 선정한 종목에 대해 MA20 기반 매수선에 접근하면 실시간 알람을 발송하는 시스템.
+시가총액·거래대금·양봉 조건으로 선정한 종목에 대해 MA20 기반 매수선 접근 알람을 발송하는 시스템.
 S1과 코드를 공유하며, 이 디렉토리(S12)가 공유 코드의 소스입니다.
 
 ---
@@ -10,7 +10,7 @@ S1과 코드를 공유하며, 이 디렉토리(S12)가 공유 코드의 소스�
 ```
 1단계: 종목 선정 (S12 전용)
   add_stocks.py                         ← 수동 종목 추가
-  Daily_Turnover_Tracker.py             ← 거래대금 기반 유니버스 갱신
+  Daily_Turnover_Tracker.py             ← S2-1/S2-2 조건 유니버스 갱신
   → output/turnover_universe.xlsx
 
          ↓ (매일 20:10 자동 실행)
@@ -109,7 +109,7 @@ python Real_Time_Monitor.py --appkey APPKEY --secret SECRET --label S12 --signal
 S12/
 ├── Trading_Signal_System.py        # 2단계: 매수선 계산 [S1과 공유 — 소스]
 ├── Real_Time_Monitor.py            # 3단계: 실시간 감시 [S1과 공유 — 소스]
-├── Daily_Turnover_Tracker.py       # 1단계: 거래대금 유니버스 갱신 (S12 전용)
+├── Daily_Turnover_Tracker.py       # 1단계: 시총·거래대금·양봉 유니버스 갱신
 ├── add_stocks.py                   # 종목 수동 추가 도구
 ├── telegram_notifier.py            # 텔레그램 알람 모듈
 ├── slack_notifier.py               # 슬랙 알람 모듈 (Block Kit)
