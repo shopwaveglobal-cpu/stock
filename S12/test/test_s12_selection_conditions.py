@@ -246,6 +246,8 @@ class SelectionConditionAlertTests(unittest.TestCase):
                 "선정조건": "S2-1+S2-2",
                 "시가총액(억)": 500_000.0,
                 "거래대금(억)": 8_000.0,
+                "S2-1 최초달성일": date(2026, 9, 9),
+                "S2-2 최초달성일": date(2026, 9, 10),
             }
         )
 
@@ -254,6 +256,8 @@ class SelectionConditionAlertTests(unittest.TestCase):
         self.assertEqual(enriched["선정조건"], "S2-1+S2-2")
         self.assertEqual(enriched["시가총액(억)"], 500_000.0)
         self.assertEqual(enriched["거래대금(억)"], 8_000.0)
+        self.assertEqual(enriched["S2-1 최초달성일"], date(2026, 9, 9))
+        self.assertEqual(enriched["S2-2 최초달성일"], date(2026, 9, 10))
 
     def test_realtime_telegram_message_displays_both_condition_label(self):
         with patch.object(telegram_notifier, "send_telegram_message", return_value=True) as send:

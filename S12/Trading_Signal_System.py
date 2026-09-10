@@ -1016,7 +1016,10 @@ def move_to_history(df_summary: pd.DataFrame, df_history: pd.DataFrame) -> Tuple
 
 def attach_selection_metadata(result: dict, universe_row: pd.Series) -> dict:
     """수집 단계의 선정 근거를 시그널 및 실시간 알림까지 전달한다."""
-    for column in ("선정조건", "시가총액(억)", "거래대금(억)"):
+    for column in (
+        "선정조건", "시가총액(억)", "거래대금(억)",
+        "S2-1 최초달성일", "S2-2 최초달성일",
+    ):
         value = universe_row.get(column)
         if value is not None and not pd.isna(value):
             result[column] = value
