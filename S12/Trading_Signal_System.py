@@ -994,14 +994,21 @@ def move_to_history(df_summary: pd.DataFrame, df_history: pd.DataFrame) -> Tuple
     try:
         turnover_file = "output/turnover_universe.xlsx"
         if os.path.exists(turnover_file):
-            df_turnover = pd.read_excel(turnover_file, dtype={'티커': str})
+            from Daily_Turnover_Tracker import (
+                get_last_update_date,
+                read_existing_data,
+                save_to_excel,
+            )
+
+            last_update = get_last_update_date(turnover_file)
+            df_turnover = read_existing_data(turnover_file)
             sold_tickers = df_sold['티커'].tolist()
             
             # 매도 완료된 종목을 Turnover Universe에서 삭제
             df_turnover_updated = df_turnover[~df_turnover['티커'].isin(sold_tickers)]
             
-            # 파일 저장
-            df_turnover_updated.to_excel(turnover_file, index=False)
+            update_date = last_update.isoformat() if last_update else None
+            save_to_excel(turnover_file, df_turnover_updated, update_date)
             
             logger.info(f"✓ Turnover Universe에서 {len(sold_tickers)}개 종목 삭제 완료")
         else:

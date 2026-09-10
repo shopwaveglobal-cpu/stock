@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+from openpyxl import load_workbook
 
 
 S12_DIR = Path(__file__).resolve().parents[1]
@@ -227,6 +228,32 @@ class SelectionConditionTests(unittest.TestCase):
 
 
 class SelectionConditionAlertTests(unittest.TestCase):
+    def test_sold_stock_removal_preserves_atomic_universe_schema(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "output"
+            output_dir.mkdir()
+            workbook = output_dir / "turnover_universe.xlsx"
+            append_to_excel(
+                workbook,
+                [(date.today(), "005930", "A", 100_000.0, 5_000.0, "S2-1+S2-2")],
+            )
+            summary = pd.DataFrame(
+                [{"티커": "005930", "종목명": "A", "매수상태": signal_system.BuyStatus.SOLD, "종가": 80_000}]
+            )
+
+            previous = Path.cwd()
+            os.chdir(temp_dir)
+            try:
+                signal_system.move_to_history(summary, pd.DataFrame())
+            finally:
+                os.chdir(previous)
+
+            checked = load_workbook(workbook, read_only=True)
+            checked.close()
+            saved = pd.read_excel(workbook, sheet_name="universe", dtype={"티커": str})
+            self.assertEqual(len(saved), 0)
+            self.assertIn("S2-1 최초달성일", saved.columns)
+
     def test_notification_env_switch_disables_external_messages(self):
         with patch.dict(os.environ, {"STOCK_AUTOMATION_NO_NOTIFY": "1"}):
             self.assertFalse(signal_system.notifications_enabled(False))
