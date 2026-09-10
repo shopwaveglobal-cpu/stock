@@ -546,6 +546,9 @@ def save_to_excel(path: str, df: pd.DataFrame, update_date: str = None):
     """데이터프레임을 openpyxl로 직접 저장 (pandas ExcelWriter 사용 안 함)"""
     from openpyxl import Workbook
 
+    def excel_value(value):
+        return None if pd.isna(value) else value
+
     # 새 워크북 생성
     wb = Workbook()
     ws = wb.active
@@ -565,7 +568,7 @@ def save_to_excel(path: str, df: pd.DataFrame, update_date: str = None):
         ws.cell(idx + 2, 2, row["최근주도주"])  # date 객체 그대로 저장
         ws.cell(idx + 2, 3, row["티커"])
         ws.cell(idx + 2, 4, row["종목명"])
-        ws.cell(idx + 2, 5, row["시가총액(억)"])
+        ws.cell(idx + 2, 5, excel_value(row["시가총액(억)"]))
         ws.cell(idx + 2, 6, row["거래대금(억)"])
         ws.cell(idx + 2, 7, row["선정조건"])
         ws.cell(idx + 2, 8, row["누적횟수"])

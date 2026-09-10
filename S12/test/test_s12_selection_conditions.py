@@ -25,6 +25,7 @@ from Daily_Turnover_Tracker import (  # noqa: E402
     append_to_excel,
     calculate_market_cap_eok,
     parse_listed_share_counts,
+    save_to_excel,
     select_stock_condition,
 )
 
@@ -112,6 +113,29 @@ class SelectionConditionTests(unittest.TestCase):
 
             with zipfile.ZipFile(workbook) as archive:
                 self.assertIsNone(archive.testzip())
+
+    def test_legacy_row_without_market_cap_can_be_saved(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workbook = Path(temp_dir) / "turnover_universe.xlsx"
+            legacy = pd.DataFrame(
+                [
+                    {
+                        "첫주도주": date.today(),
+                        "최근주도주": date.today(),
+                        "티커": "005930",
+                        "종목명": "A",
+                        "시가총액(억)": pd.NA,
+                        "거래대금(억)": 5_000.0,
+                        "선정조건": "기존 누적",
+                        "누적횟수": 1,
+                    }
+                ]
+            )
+
+            save_to_excel(workbook, legacy, "2026-09-10")
+
+            saved = pd.read_excel(workbook, sheet_name="universe", dtype={"티커": str})
+            self.assertTrue(pd.isna(saved.loc[0, "시가총액(억)"]))
 
     def test_collection_flow_applies_both_tiers_and_rejects_non_matches(self):
         rank_response = {
