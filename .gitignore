@@ -3,3 +3,5 @@
 # 내부 전용 (실제 매매 수치 포함) — origin이 공개 저장소이므로 커밋 금지
 PORTFOLIO_LOGIC_FULL.md
 docs/private/
+kakao_brief/cards/
+__pycache__/
