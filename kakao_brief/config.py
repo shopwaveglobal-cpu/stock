@@ -1,19 +1,26 @@
 """지표·섹터 정의와 색상. 표시 규칙만 여기서 바꾼다."""
 
-INDICES = [("NASDAQ", "^IXIC"), ("S&P 500", "^GSPC"), ("DOW", "^DJI"), ("KOSDAQ", "^KQ11")]
+INDICES = [
+    ("코스피", "^KS11"),
+    ("코스닥", "^KQ11"),
+    ("나스닥", "^IXIC"),
+    ("S&P 500", "^GSPC"),
+    ("다우", "^DJI"),
+    ("나스닥100 선물", "NQ=F"),
+]
 
 SECTORS = [
-    ("XLK", "전자기술/IT", ["AAPL", "MSFT", "NVDA"]),
-    ("XLF", "금융/은행", ["BRK-B", "JPM", "V"]),
-    ("XLV", "헬스케어/바이오", ["LLY", "UNH", "JNJ"]),
+    ("XLK", "IT·반도체", ["AAPL", "MSFT", "NVDA"]),
+    ("XLF", "금융", ["BRK-B", "JPM", "V"]),
+    ("XLV", "헬스케어·바이오", ["LLY", "UNH", "JNJ"]),
     ("XLE", "에너지", ["XOM", "CVX", "COP"]),
-    ("XLI", "산업재/방산", ["GE", "RTX", "CAT"]),
-    ("XLY", "임의소비재", ["AMZN", "TSLA", "HD"]),
+    ("XLI", "산업재·방산", ["GE", "RTX", "CAT"]),
+    ("XLY", "경기소비재", ["AMZN", "TSLA", "HD"]),
     ("XLP", "필수소비재", ["PG", "KO", "PEP"]),
     ("XLU", "유틸리티", ["NEE", "SO", "DUK"]),
-    ("XLRE", "부동산/리츠", ["AMT", "PLD", "EQIX"]),
-    ("XLB", "소재/화학", ["LIN", "APD", "SHW"]),
-    ("XLC", "통신/미디어", ["META", "GOOGL", "NFLX"]),
+    ("XLRE", "부동산·리츠", ["AMT", "PLD", "EQIX"]),
+    ("XLB", "소재·화학", ["LIN", "APD", "SHW"]),
+    ("XLC", "통신·미디어", ["META", "GOOGL", "NFLX"]),
 ]
 
 # (라벨, 심볼, 표시 배수, 접두, 접미, 소수자리)
@@ -25,6 +32,7 @@ MACRO = [
     ("USD/KRW", "KRW=X", 1, "", "원", 1),
     ("EUR/KRW", "EURKRW=X", 1, "", "원", 1),
     ("JPY 100엔", "JPYKRW=X", 100, "", "원", 1),  # 히스토리 단위는 1엔당, 표시만 x100
+    ("WTI 원유", "CL=F", 1, "$", "", 2),
 ]
 
 TOP_N = 3

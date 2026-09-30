@@ -14,12 +14,12 @@ def _row(sym, base, pct):
 def make():
     random.seed(7)
     d = {}
-    for (_, s), b in zip(INDICES, [22500, 6800, 46200, 900]):
+    for (_, s), b in zip(INDICES, [3400, 900, 22500, 6800, 46200, 24800]):
         d[s] = _row(s, b, random.uniform(-1.2, 1.4))
     for e, _, ts in SECTORS:
         d[e] = _row(e, 100, random.uniform(-1.8, 2.0))
         for t in ts:
             d[t] = _row(t, 100, random.uniform(-3, 3))
-    for (_, s, *_), b in zip(MACRO, [3900, 47, 112000, 4100, 1390, 1630, 9.3]):
+    for (_, s, *_), b in zip(MACRO, [3900, 47, 112000, 4100, 1390, 1630, 9.3, 68]):
         d[s] = _row(s, b, random.uniform(-2, 2))
     return d

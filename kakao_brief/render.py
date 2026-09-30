@@ -99,32 +99,25 @@ def header_sub(data):
     return f"{kst.month}/{kst.day} ({DAYS[kst.weekday()]}) · {us_txt}"
 
 
-def tile(d, x, y, w, h, label, big, pct, sub, hist):
-    d.rounded_rectangle((x, y, x + w, y + h), 22, fill=PANEL, outline=LINE, width=2)
-    c = col(pct)
-    put(d, (x + 28, y + 24), label, 26, MUTED, True)
-    put(d, (x + 28, y + 64), big, 44, TXT, True)
-    put(d, (x + 28, y + 122), f"{'▲' if pct >= 0 else '▼'} {fpct(pct)}", 30, c, True)
-    if sub:
-        put(d, (x + 28, y + 164), sub, 22, MUTED)
-    if hist and len(hist) > 1:
-        spark(d, (x + 32, y + h - 120, x + w - 32, y + h - 40), hist, c)
+def index_row(d, x, y, w, h, name, r):
+    d.rounded_rectangle((x, y, x + w, y + h), 20, fill=PANEL, outline=LINE, width=2)
+    put(d, (x + 28, y + h / 2), name, 32, TXT, True, "lm")
+    if not r:
+        put(d, (x + w - 28, y + h / 2), "데이터 없음", 28, MUTED, anchor="rm")
+        return
+    c = col(r["pct"])
+    sign = "+" if r["chg"] >= 0 else ""
+    spark(d, (x + 330, y + 30, x + 560, y + h - 30), r["hist"], c)
+    put(d, (x + w - 28, y + 40), fnum(r["close"]), 34, TXT, True, "rm")
+    put(d, (x + w - 28, y + 86), f"{'▲' if r['pct'] >= 0 else '▼'} {fpct(r['pct'])}  {sign}{r['chg']:,.2f}", 24, c, True, "rm")
 
 
 def card1(data, sub):
     im, d = base("시장 지수", sub, 1)
-    tw, th, gx, gy, y0 = 460, 360, 40, 40, 200
+    rh, gap, y0 = 120, 12, 190
     for i, (name, sym) in enumerate(INDICES):
-        x, y = 60 + (i % 2) * (tw + gx), y0 + (i // 2) * (th + gy)
-        r = data.get(sym)
-        if not r:
-            d.rounded_rectangle((x, y, x + tw, y + th), 22, fill=PANEL, outline=LINE, width=2)
-            put(d, (x + 28, y + 24), name, 26, MUTED, True)
-            put(d, (x + 28, y + 90), "데이터 없음", 34, MUTED)
-            continue
-        sign = "+" if r["chg"] >= 0 else ""
-        tile(d, x, y, tw, th, name, fnum(r["close"]), r["pct"], f"{sign}{r['chg']:,.2f} pt", r["hist"])
-    put(d, (60, y0 + 2 * th + gy + 22), "우측 선: 최근 5거래일 종가 흐름", 20, MUTED)
+        index_row(d, 60, y0 + i * (rh + gap), 960, rh, name, data.get(sym))
+    put(d, (60, y0 + len(INDICES) * (rh + gap) + 2), "가운데 선: 최근 5거래일 종가 흐름 · 나스닥100 선물은 진행 중인 값", 18, MUTED)
     return im
 
 
@@ -147,8 +140,7 @@ def card2(data, sub):
     for i, (e, n, ts) in enumerate(rows):
         y, p = y0 + i * rh, data[e]["pct"]
         pick = e in hi
-        put(d, (60, y + 6), e, 26, TXT, True)
-        put(d, (60, y + 38), n, 18, MUTED)
+        put(d, (60, y + (8 if pick else 20)), n, 28, TXT, True)
         bw = max(4, half * abs(p) / mx)
         by = y + (8 if pick else 20)
         x0, x1 = (zero, zero + bw) if p >= 0 else (zero - bw, zero)
@@ -177,10 +169,7 @@ def card3(data, sub):
         put(d, (x + 28, y + 58), fnum(r["close"] * mul, dec, pre, suf), 38, TXT, True)
         put(d, (x + 28, y + 114), f"{'▲' if r['pct'] >= 0 else '▼'} {fpct(r['pct'])}", 28, c, True)
         spark(d, (x + tw - 170, y + th - 90, x + tw - 34, y + th - 34), hist, c)
-    x, y = 60 + (len(MACRO) % 2) * (tw + gx), y0 + (len(MACRO) // 2) * (th + gy)
-    put(d, (x + 28, y + 40), "금·은: 선물(GC=F, SI=F)", 20, MUTED)
-    put(d, (x + 28, y + 76), "BTC·ETH·환율: 24시간 시세라", 20, MUTED)
-    put(d, (x + 28, y + 108), "당일 진행 값이 섞일 수 있음", 20, MUTED)
+    put(d, (60, y0 + 4 * (th + gy) + 2), "금·은·원유: 선물 시세 · BTC·ETH·환율: 24시간 시세라 당일 진행 값이 섞일 수 있음", 18, MUTED)
     return im
 
 
