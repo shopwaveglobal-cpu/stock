@@ -67,3 +67,16 @@ def send_cards(paths, date_text):
         )
         _check(r, f"카드 {i} 발송")
         print(f"카드 {i} 발송 완료")
+
+
+def send_link(page_url, title, desc, image_path=None):
+    """브리핑 페이지 링크 발송 (피드 템플릿, 미리보기 이미지는 선택)."""
+    token = access_token()
+    content = {"title": title, "description": desc, "link": {"web_url": page_url, "mobile_web_url": page_url}}
+    if image_path:
+        url, w, h = upload(token, image_path)
+        content.update({"image_url": url, "image_width": w, "image_height": h})
+    tpl = {"object_type": "feed", "content": content, "buttons": [{"title": "브리핑 열기", "link": {"web_url": page_url, "mobile_web_url": page_url}}]}
+    r = requests.post(MEMO, headers={"Authorization": f"Bearer {token}"}, data={"template_object": json.dumps(tpl, ensure_ascii=False)}, timeout=15)
+    _check(r, "링크 발송")
+    print("링크 발송 완료")
