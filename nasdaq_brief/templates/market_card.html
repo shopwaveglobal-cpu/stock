@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #090E14;
+  --card:    #111820;
+  --card2:   #0E1621;
+  --neon:    #7BFF72;
+  --neon-d:  rgba(123,255,114,0.12);
+  --neon-g:  0 0 10px rgba(123,255,114,0.35);
+  --up:      #7BFF72;
+  --down:    #FF5F6D;
+  --blue:    #60A5FA;
+  --txt:     #E2E8F0;
+  --txt2:    #7A8999;
+  --txt3:    #3D4F61;
+  --border:  rgba(123,255,114,0.08);
+  --mono:    'JetBrains Mono', monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg);
+  width: 420px;
+  font-family: 'Noto Sans KR', sans-serif;
+  color: var(--txt);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── HEADER ───────────────────────────── */
+.header {
+  background: linear-gradient(160deg, #0D1821 0%, #111C28 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 18px 20px 15px;
+  position: relative;
+  overflow: hidden;
+}
+.header::before {
+  content:'';
+  position:absolute; inset:0;
+  background-image: radial-gradient(circle, rgba(123,255,114,0.025) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+.header::after {
+  content:'';
+  position:absolute; bottom:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, transparent 0%, var(--neon) 50%, transparent 100%);
+  opacity: 0.5;
+}
+.hdr-top {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:10px; position:relative;
+}
+.live-badge {
+  display:flex; align-items:center; gap:5px;
+  background: var(--neon-d);
+  border: 1px solid rgba(123,255,114,0.25);
+  border-radius: 20px; padding: 3px 9px;
+  font-size:9px; font-weight:700; letter-spacing:1.5px;
+  color: var(--neon); font-family: var(--mono);
+}
+.live-dot {
+  width:5px; height:5px; background:var(--neon);
+  border-radius:50%; box-shadow: 0 0 6px var(--neon);
+}
+.hdr-date {
+  font-size:10px; color:var(--txt2);
+  font-family:var(--mono); letter-spacing:0.5px;
+}
+.hdr-title {
+  font-size:24px; font-weight:700; color:var(--neon);
+  letter-spacing:-0.5px;
+  text-shadow: 0 0 20px rgba(123,255,114,0.4);
+  position:relative;
+}
+.hdr-sub {
+  font-size:11px; color:var(--txt2); margin-top:3px;
+  font-family:var(--mono);
+}
+
+/* ── SECTION ──────────────────────────── */
+.sec { padding: 14px 16px; }
+.sec-title {
+  font-size:9px; font-weight:700; letter-spacing:2px;
+  color:var(--txt2); text-transform:uppercase;
+  font-family:var(--mono); margin-bottom:10px;
+  display:flex; align-items:center; gap:8px;
+}
+.sec-title::after {
+  content:''; flex:1; height:1px;
+  background: linear-gradient(90deg, var(--border), transparent);
+}
+.divider {
+  height:1px; background: var(--border); margin: 0 16px;
+}
+
+/* ── INDEX CARDS ──────────────────────── */
+.idx-grid {
+  display:grid; grid-template-columns:1fr 1fr 1fr; gap:7px;
+}
+.idx-card {
+  background:var(--card); border:1px solid rgba(255,255,255,0.05);
+  border-radius:8px; padding:10px 9px;
+}
+.idx-name {
+  font-size:9px; font-weight:700; letter-spacing:0.8px;
+  color:var(--txt2); font-family:var(--mono); margin-bottom:5px;
+}
+.idx-price {
+  font-size:15px; font-weight:700; color:var(--txt);
+  font-family:var(--mono); letter-spacing:-0.5px;
+}
+.idx-chg {
+  font-size:11px; font-weight:600;
+  font-family:var(--mono); margin-top:3px;
+}
+.up { color:var(--up); }
+.dn { color:var(--down); }
+
+/* ── CHART ────────────────────────────── */
+.chart-wrap {
+  background:var(--card); border:1px solid rgba(255,255,255,0.05);
+  border-radius:8px; padding:10px 10px 6px;
+}
+.chart-legend {
+  display:flex; gap:14px; margin-bottom:6px;
+}
+.leg-item {
+  display:flex; align-items:center; gap:5px;
+  font-size:10px; color:var(--txt2); font-family:var(--mono);
+}
+.leg-line { width:14px; height:2px; border-radius:1px; }
+
+/* ── SECTOR HEATMAP ───────────────────── */
+.sector-grid {
+  display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px;
+}
+.sector-cell {
+  border-radius:6px; padding:6px 7px; text-align:center;
+}
+.s-name {
+  font-size:9px; font-weight:500; color:rgba(255,255,255,0.8);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.s-pct {
+  font-size:12px; font-weight:700; font-family:var(--mono); margin-top:2px;
+}
+
+/* ── FEAR & GREED ─────────────────────── */
+.fg-wrap {
+  background:var(--card); border:1px solid rgba(255,255,255,0.05);
+  border-radius:8px; padding:14px 14px;
+  display:flex; align-items:center; gap:14px;
+}
+.fg-score-box { text-align:center; min-width:64px; }
+.fg-score {
+  font-size:34px; font-weight:700; font-family:var(--mono);
+  line-height:1;
+}
+.fg-lbl { font-size:11px; font-weight:600; margin-top:3px; }
+.fg-src { font-size:8px; color:var(--txt3); font-family:var(--mono); margin-top:2px; }
+.fg-right { flex:1; }
+.fg-gauge-track {
+  height:7px; border-radius:4px;
+  background: linear-gradient(90deg, #2563EB 0%, #3B82F6 20%, #22C55E 50%, #F59E0B 75%, #EF4444 100%);
+  position:relative; margin-bottom:5px;
+}
+.fg-ptr {
+  position:absolute; top:-4px;
+  width:14px; height:14px; background:#fff;
+  border-radius:50%; box-shadow:0 0 6px rgba(255,255,255,0.5);
+  transform:translateX(-50%);
+}
+.fg-ticks {
+  display:flex; justify-content:space-between;
+  font-size:8px; color:var(--txt3); font-family:var(--mono);
+}
+
+/* ── NEWS ────────────────────────────── */
+.news-item {
+  background:var(--card); border:1px solid rgba(255,255,255,0.05);
+  border-radius:7px; padding:9px 11px; margin-bottom:5px;
+}
+.news-num {
+  font-size:8px; font-weight:700; color:var(--neon);
+  font-family:var(--mono); margin-bottom:4px; letter-spacing:1px;
+}
+.news-title {
+  font-size:12px; font-weight:500; color:var(--txt);
+  line-height:1.45; margin-bottom:3px;
+}
+.news-impact {
+  font-size:10px; color:var(--txt2); line-height:1.4;
+}
+
+/* ── CHECKPOINTS ─────────────────────── */
+.cp-item {
+  background:var(--card2);
+  border:1px solid rgba(255,255,255,0.04);
+  border-left: 3px solid var(--neon);
+  border-radius:7px; padding:11px 12px; margin-bottom:5px;
+}
+.cp-item.news { border-left-color: var(--blue); }
+.cp-tag {
+  font-size:8px; font-weight:700; letter-spacing:1.2px;
+  font-family:var(--mono); color:var(--neon); margin-bottom:5px;
+}
+.cp-item.news .cp-tag { color:var(--blue); }
+.cp-title {
+  font-size:12px; font-weight:600; color:var(--txt); margin-bottom:5px;
+}
+.cp-desc {
+  font-size:10.5px; color:var(--txt2); line-height:1.65;
+}
+
+/* ── VERIFICATION ────────────────────── */
+.vf-item {
+  display:flex; align-items:flex-start; gap:8px;
+  background:var(--card); border-radius:6px;
+  padding:7px 10px; margin-bottom:4px;
+}
+.vf-icon { font-size:13px; margin-top:1px; }
+.vf-title { font-size:11px; font-weight:600; color:var(--txt); margin-bottom:2px; }
+.vf-reason { font-size:10px; color:var(--txt2); }
+
+/* ── FOOTER ──────────────────────────── */
+.footer {
+  padding:10px 16px 0;
+  text-align:center; font-size:8px; color:var(--txt3);
+  font-family:var(--mono); letter-spacing:0.5px;
+}
+</style>
+</head>
+<body>
+<div style="width:420px; background:var(--bg); padding-bottom:20px;">
+
+<!-- ══ HEADER ══════════════════════════ -->
+<div class="header">
+  <div class="hdr-top">
+    <div class="live-badge">
+      <div class="live-dot"></div>LIVE SIGNAL
+    </div>
+    <div class="hdr-date">DATE {{ date_en }}</div>
+  </div>
+  <div class="hdr-title">나스닥 브리핑</div>
+  <div class="hdr-sub">{{ date_ko }} &nbsp;·&nbsp; 미국 전일 시장 요약</div>
+</div>
+
+<!-- ══ INDICES ═══════════════════════════ -->
+<div class="sec">
+  <div class="sec-title">미국 전일 시장</div>
+  <div class="idx-grid">
+    {% for idx in indices %}
+    <div class="idx-card">
+      <div class="idx-name">{{ idx.name }}</div>
+      <div class="idx-price">{{ idx.price_fmt }}</div>
+      <div class="idx-chg {{ 'up' if idx.pct >= 0 else 'dn' }}">
+        {{ '+' if idx.pct >= 0 else '' }}{{ "%.2f"|format(idx.pct) }}%
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ══ 5-DAY CHART ═════════════════════ -->
+<div class="sec">
+  <div class="sec-title">5일 지수 흐름 비교</div>
+  <div class="chart-wrap">
+    <div class="chart-legend">
+      <div class="leg-item"><div class="leg-line" style="background:#7BFF72;"></div>NASDAQ</div>
+      <div class="leg-item"><div class="leg-line" style="background:#60A5FA;"></div>KOSPI</div>
+    </div>
+    {% if chart %}
+    <svg width="{{ chart.svg_w }}" height="{{ chart.svg_h + 14 }}"
+         viewBox="0 0 {{ chart.svg_w }} {{ chart.svg_h + 14 }}"
+         xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="2.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <linearGradient id="ngrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#7BFF72" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#7BFF72" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <!-- Grid -->
+      {% for yi in [0, 27, 54, 81] %}
+      <line x1="0" y1="{{ yi }}" x2="{{ chart.svg_w }}" y2="{{ yi }}"
+            stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+      {% endfor %}
+      <!-- KOSPI -->
+      {% if chart.kospi_path %}
+      <path d="{{ chart.kospi_path }}" fill="none" stroke="#60A5FA"
+            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+      {% endif %}
+      <!-- NASDAQ -->
+      <path d="{{ chart.nasdaq_path }}" fill="none" stroke="#7BFF72"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- Last point glow -->
+      <circle cx="{{ chart.last_x }}" cy="{{ chart.nasdaq_last_y }}"
+              r="4" fill="#7BFF72" filter="url(#glow)"/>
+      <!-- Date labels -->
+      {% for lbl in chart.date_labels %}
+      <text x="{{ lbl.x }}" y="{{ chart.svg_h + 13 }}" text-anchor="middle"
+            font-size="9" fill="#3D4F61" font-family="JetBrains Mono, monospace">{{ lbl.date }}</text>
+      {% endfor %}
+    </svg>
+    {% else %}
+    <div style="text-align:center;color:#3D4F61;font-size:11px;padding:20px 0;">차트 데이터 없음</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ══ SECTOR HEATMAP ══════════════════ -->
+<div class="sec">
+  <div class="sec-title">미국 섹터 히트맵</div>
+  <div class="sector-grid">
+    {% for s in sectors %}
+    <div class="sector-cell" style="background:{{ s.bg_color }};">
+      <div class="s-name">{{ s.name }}</div>
+      <div class="s-pct" style="color:{{ s.text_color }};">
+        {{ '+' if s.pct >= 0 else '' }}{{ "%.1f"|format(s.pct) }}%
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ══ FEAR & GREED ═══════════════════ -->
+<div class="sec">
+  <div class="sec-title">공포·탐욕 지수 (미국)</div>
+  <div class="fg-wrap">
+    <div class="fg-score-box">
+      <div class="fg-score" style="color:{{ fg.color }};">{{ fg.score }}</div>
+      <div class="fg-lbl" style="color:{{ fg.color }};">{{ fg.label_ko }}</div>
+      <div class="fg-src">{{ fg.source }}</div>
+    </div>
+    <div class="fg-right">
+      <div class="fg-gauge-track">
+        <div class="fg-ptr" style="left:{{ fg.pct }}%;"></div>
+      </div>
+      <div class="fg-ticks">
+        <span>극공포</span><span>공포</span><span>중립</span><span>탐욕</span><span>극탐욕</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ══ NEWS ═══════════════════════════ -->
+<div class="sec">
+  <div class="sec-title">주요 뉴스</div>
+  {% for n in news %}
+  <div class="news-item" style="padding:8px 11px;">
+    <div class="news-num">{{ loop.index }}</div>
+    <div class="news-title" style="margin-bottom:0;">{{ n.title }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="divider"></div>
+
+<!-- ══ CHECKPOINTS ════════════════════ -->
+<div class="sec">
+  {% for cp in checkpoints %}
+  <div class="cp-item {{ 'news' if cp.type == 'news' else '' }}">
+    <div class="cp-tag">
+      {{ '지수 기반' if cp.type == 'quant' else '뉴스 기반' }} 체크포인트
+    </div>
+    <div class="cp-title">{{ cp.title }}</div>
+    <div class="cp-desc">{{ cp.description }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if verification %}
+<div class="divider"></div>
+<div class="sec">
+  <div class="sec-title">전일 예측 검증</div>
+  {% for v in verification %}
+  <div class="vf-item">
+    <div class="vf-icon">{{ v.icon }}</div>
+    <div>
+      <div class="vf-title">{{ v.title }}</div>
+      <div class="vf-reason">{{ v.reason }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="footer">DATA · Yahoo Finance &nbsp;|&nbsp; CNN Fear&Greed &nbsp;|&nbsp; {{ timestamp }}</div>
+
+</div>
+</body>
+</html>

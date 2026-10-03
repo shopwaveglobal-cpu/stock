@@ -1,5 +1,18 @@
 .worktrees/
 
-# 내부 전용 (실제 매매 수치 포함) — origin이 공개 저장소이므로 커밋 금지
+# Internal-only inputs and private market data
 PORTFOLIO_LOGIC_FULL.md
 docs/private/
+
+## Generated, device-local, or secret data
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+Morning Brief/day_input.json
+Morning Brief/cards/*
+!Morning Brief/cards/.gitkeep
+nasdaq_brief/data/checkpoints.json
+nasdaq_brief/output/*
+!nasdaq_brief/output/.gitkeep
